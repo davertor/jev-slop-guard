@@ -56,11 +56,28 @@ export function listLinkedInArticles(root: ParentNode = document): HTMLElement[]
     return true;
   });
   return outer.filter((el) => {
+    if (isLinkedInNoiseModule(el)) return false;
     const rectH = el.getBoundingClientRect().height;
     const h = rectH > 0 ? rectH : (el as HTMLElement).offsetHeight || 0;
     if (h === 0) return true;
     return h > 80 && h < Math.max(window.innerHeight, 600) * 2.5;
   });
+}
+
+/** People/company suggestion rails, not real posts. */
+export function isLinkedInNoiseModule(article: HTMLElement): boolean {
+  const header = clean(
+    article.querySelector('h2, h3, .feed-shared-header, [class*="suggestion"]')?.textContent ?? '',
+  );
+  if (/^(Sugerencias|Suggestions|People you may know|Personas que quizás conozcas)$/i.test(header)) {
+    return true;
+  }
+  if (article.querySelector('[data-view-name*="suggestion"], .discovery-ocean-actor-item, .reusable-search__result-container')) {
+    // Only treat as noise when the card itself looks like a rail, not a post mentioning those classes.
+    const urn = article.getAttribute('data-urn') ?? article.getAttribute('data-id') ?? '';
+    if (!/urn:li:(activity|ugcPost|share)/.test(urn)) return true;
+  }
+  return false;
 }
 
 export function extractLinkedInPost(article: HTMLElement): ExtractedLinkedInPost | null {
@@ -110,29 +127,54 @@ function dropNested(els: HTMLElement[]): HTMLElement[] {
   return els.filter((el) => !els.some((other) => other !== el && other.contains(el)));
 }
 
+function stripSeeMore(text: string): string {
+  return text
+    .replace(/(\s*[….]{1,3}\s*)?(más|more|see more|ver más|…\s*más)\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function pickText(article: HTMLElement): string {
+  const candidates: string[] = [];
+
+  // Commentary containers — take the longest (collapsed line-clamp still exposes full textContent).
   for (const sel of TEXT_SELECTORS) {
-    const node = article.querySelector(sel);
-    const t = clean(node?.textContent ?? '');
-    if (t.length >= 12) return t;
+    for (const node of article.querySelectorAll(sel)) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (node.closest('button, nav, footer, .social-details-social-counts, .social-details-social-activity, [role="button"]')) {
+        continue;
+      }
+      const t = stripSeeMore(clean(node.textContent ?? ''));
+      if (t.length >= 12) candidates.push(t);
+    }
   }
 
-  // Prefer spans under commentary-like containers if class names are hashed.
-  const candidates: string[] = [];
-  for (const el of article.querySelectorAll('span[dir="ltr"], p, span')) {
-    if (el.closest('button, nav, footer, .social-details-social-counts, [role="button"]')) continue;
-    const t = clean(el.textContent ?? '');
+  // Explicit show-more wrappers often hold the full body while the UI is collapsed.
+  for (const node of article.querySelectorAll(
+    '.feed-shared-inline-show-more-text, .feed-shared-update-v2__description, .update-components-text',
+  )) {
+    if (!(node instanceof HTMLElement)) continue;
+    const t = stripSeeMore(clean(node.textContent ?? ''));
+    if (t.length >= 12) candidates.push(t);
+  }
+
+  for (const el of article.querySelectorAll('span[dir="ltr"], p')) {
+    if (el.closest('button, nav, footer, .social-details-social-counts, .social-details-social-activity, [role="button"], .update-components-actor')) {
+      continue;
+    }
+    const t = stripSeeMore(clean(el.textContent ?? ''));
     if (t.length >= 40 && t.length < 4000) candidates.push(t);
   }
+
   candidates.sort((a, b) => b.length - a.length);
   if (candidates[0]) return candidates[0];
 
   let best = '';
   for (const el of article.querySelectorAll('span, p, div')) {
-    if (el.closest('button, a[href*="comment"], .social-details-social-counts, [role="button"]')) {
+    if (el.closest('button, a[href*="comment"], .social-details-social-counts, .social-details-social-activity, [role="button"]')) {
       continue;
     }
-    const t = clean(el.textContent ?? '');
+    const t = stripSeeMore(clean(el.textContent ?? ''));
     if (t.length > best.length && t.length < 4000 && t.length >= 12) best = t;
   }
   return best;

@@ -118,3 +118,26 @@
   font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
+
+/* linkedin-top-badge */
+.slop-guard-card.feed-shared-update-v2 > .slop-guard-row,
+.slop-guard-card[data-urn] > .slop-guard-row,
+.slop-guard-card[data-id] > .slop-guard-row,
+.slop-guard-card.occludable-update > .slop-guard-row {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  right: auto;
+  margin: 0;
+  padding: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.slop-guard-card.feed-shared-update-v2 > .slop-guard-row .slop-guard-badge,
+.slop-guard-card[data-urn] > .slop-guard-row .slop-guard-badge,
+.slop-guard-card[data-id] > .slop-guard-row .slop-guard-badge,
+.slop-guard-card.occludable-update > .slop-guard-row .slop-guard-badge {
+  pointer-events: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
