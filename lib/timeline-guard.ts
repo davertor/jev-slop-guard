@@ -262,6 +262,6 @@ function showMissingKeyBanner(state: { shown: boolean }, message?: string): void
   const banner = document.createElement('div');
   banner.className = 'slop-guard-banner';
   banner.textContent =
-    message ?? 'Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.';
+    message ?? 'Jev Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.';
   document.body.append(banner);
 }

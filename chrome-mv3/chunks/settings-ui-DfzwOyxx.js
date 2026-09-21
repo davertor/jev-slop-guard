@@ -3,7 +3,7 @@ import { a as chromeApi, c as sendRuntimeMessage, l as sendTabMessage, n as load
 var SETTINGS_FORM_HTML = `
   <header>
     <div>
-      <p class="eyebrow">Slop Guard</p>
+      <p class="eyebrow">Jev Slop Guard</p>
       <h1>Real-time slop detector</h1>
     </div>
     <button id="pause-toggle" type="button" class="pause-toggle">Pause</button>
