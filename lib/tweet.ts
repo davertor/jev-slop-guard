@@ -11,10 +11,14 @@ const REPOST_RE =
 const SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 const SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 const MIN_TEXT = 4;
-const MEDIA_CHROME =
-  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"], [data-testid="previewInterstitial"], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]';
+const HARD_MEDIA_CHROME =
+  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]';
+const SOFT_MEDIA_CHROME = '[data-testid="previewInterstitial"], [data-testid="card.wrapper"]';
+const MEDIA_CHROME = `${HARD_MEDIA_CHROME}, ${SOFT_MEDIA_CHROME}`;
 const PLAYER_OVERLAY_RE = /^(Original|AI|GIF|Play|Pause|Video|Live)$/i;
 const CAPTION_SEL = 'div[lang], span[lang], div[dir="auto"], span[dir="auto"]';
+const WHO_TO_FOLLOW_RE = /who\s+to\s+follow|a\s+qui[eé]n\s+seguir/i;
+const FOLLOW_CTA_RE = /^(Follow|Seguir|Following|Siguiendo)$/i;
 
 export function tweetIdFromHref(href: string): string | null {
   const match = href.match(STATUS_RE);
@@ -31,6 +35,7 @@ export function explainExtract(article: HTMLElement): {
   reason: string;
   item: ExtractedTweet | null;
 } {
+  if (isWhoToFollowItem(article)) return { ok: false, reason: 'who-to-follow', item: null };
   if (isPromoted(article)) return { ok: false, reason: 'promoted', item: null };
 
   const text = ownTweetText(article);
@@ -54,6 +59,7 @@ export function explainExtract(article: HTMLElement): {
 export function listTweetArticles(root: ParentNode = document): HTMLElement[] {
   const all = uniqueElements([...queryDeep(root, '[data-testid="tweet"]'), ...articlesFromCells(root)]);
   return all.filter((article) => {
+    if (isWhoToFollowItem(article)) return false;
     if (isMediaHusk(article)) return false;
     const nested = nestedTweetCards(article).filter((card) => !isMediaHusk(card));
     if (nested.length === 0) return true;
@@ -345,12 +351,56 @@ function usableText(value: string | null | undefined): boolean {
 }
 
 export function inMediaChrome(node: Element): boolean {
-  if (node.closest(MEDIA_CHROME)) return true;
+  if (node.closest(HARD_MEDIA_CHROME)) return true;
+  // previewInterstitial / card.wrapper also wrap real captions on video cards.
+  if (node.closest(SOFT_MEDIA_CHROME) && !isSoftChromeCaption(node)) return true;
   // Walk out of video player shadow roots (linkedom has no ShadowRoot).
   let root: { host?: Element } = node.getRootNode() as { host?: Element };
   while (root.host instanceof Element) {
-    if (root.host.matches(MEDIA_CHROME) || root.host.closest(MEDIA_CHROME)) return true;
+    if (root.host.matches(HARD_MEDIA_CHROME) || root.host.closest(HARD_MEDIA_CHROME)) return true;
+    if (
+      (root.host.matches(SOFT_MEDIA_CHROME) || root.host.closest(SOFT_MEDIA_CHROME)) &&
+      !isSoftChromeCaption(node)
+    ) {
+      return true;
+    }
     root = root.host.getRootNode() as { host?: Element };
+  }
+  return false;
+}
+
+function isSoftChromeCaption(node: Element): boolean {
+  if (!usableText(node.textContent)) return false;
+  return node.getAttribute('data-testid') === 'tweetText' || node.matches(CAPTION_SEL);
+}
+
+/** Sidebar / inline “Who to follow” — UserCell, aside heading, Follow/Seguir cells. Not timeline articles. */
+function isWhoToFollowItem(el: HTMLElement): boolean {
+  if (el.getAttribute('data-testid') === 'tweet' && !isMediaHusk(el)) return false;
+  if (realTweetCards(el).length > 0) return false;
+  if (el.closest('[data-testid="UserCell"]') || el.querySelector('[data-testid="UserCell"]')) return true;
+  if (el.querySelector('[data-testid="User-Name"]') && hasFollowCta(el)) return true;
+  const aside = el.closest('aside');
+  if (aside && WHO_TO_FOLLOW_RE.test(aside.textContent ?? '')) return true;
+  let node: HTMLElement | null = el;
+  for (let i = 0; i < 6 && node; i += 1) {
+    const heading = node.querySelector('h1, h2, [role="heading"]');
+    if (
+      heading &&
+      WHO_TO_FOLLOW_RE.test(cleanText(heading.textContent)) &&
+      realTweetCards(node).length === 0
+    ) {
+      return true;
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
+function hasFollowCta(el: HTMLElement): boolean {
+  if (el.querySelector('[data-testid="follow"]')) return true;
+  for (const btn of el.querySelectorAll('button, [role="button"]')) {
+    if (FOLLOW_CTA_RE.test(cleanText(btn.textContent))) return true;
   }
   return false;
 }
@@ -379,6 +429,7 @@ function realTweetCards(root: ParentNode): HTMLElement[] {
 function articlesFromCells(root: ParentNode): HTMLElement[] {
   const out: HTMLElement[] = [];
   for (const cell of queryDeep(root, '[data-testid="cellInnerDiv"]')) {
+    if (isWhoToFollowItem(cell)) continue;
     const real = realTweetCards(cell);
     if (real.length > 0) {
       out.push(...real);
