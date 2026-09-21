@@ -92,6 +92,7 @@ export function runTimelineGuard(
 
       inFlightArticles.add(article);
       article.dataset.slopId = item.id;
+      article.dataset.slopTextPreview = item.text.slice(0, 280);
       article.dataset.slopPendingAt = String(Date.now());
       markPending(article);
 

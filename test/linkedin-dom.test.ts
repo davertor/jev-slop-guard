@@ -225,3 +225,47 @@ test('Sugerencias rail is not listed as a LinkedIn post card', () => {
   assert.equal(cards.some((c) => c.id === 'suggestions-rail'), false);
   assert.equal(cards.some((c) => c.id === 'real-post'), true);
 });
+
+test('regression FeedType card without data-urn: badge still pins as first child', () => {
+  const root = mount(`
+    <div componentkey="urn:li:feedType:MAIN_FEED:abc" data-finite-scroll-hotkey-item="1" id="feedtype-post">
+      <div class="update-components-actor__title"><a href="/in/x"><span aria-hidden="true">Author</span></a></div>
+      <div class="feed-shared-update-v2__commentary update-components-text">
+        <span dir="ltr">Hace poco me compré un Garmin. Tras un par de semanas usándolo, me di cuenta de que estaba acumulando muchísimos datos que apenas sabía interpretar.</span>
+      </div>
+      <div><button aria-label="Recomendar">Recomendar</button><button>Comentar</button></div>
+    </div>`);
+  const article = root.querySelector('#feedtype-post') as HTMLElement;
+  applyVerdict(
+    article,
+    {
+      tweetId: 'li-feedtype-1',
+      label: 'not_slop' as const,
+      slopP: 0,
+      notP: 1,
+      model: 'jev-latest',
+    },
+    { ...DEFAULT_SETTINGS, showNotSlop: true },
+  );
+  assert.equal(article.firstElementChild?.className, 'slop-guard-row');
+  assert.equal(article.querySelectorAll('.slop-guard-row').length, 1);
+  assert.equal((article.firstElementChild as HTMLElement).style.position, 'absolute');
+  assert.equal((article.firstElementChild as HTMLElement).style.top, '8px');
+});
+
+test('extract LinkedIn FeedType collapsed Garmin-like post yields long body', () => {
+  const body =
+    'Hace poco me compré un Garmin. Tras un par de semanas usándolo, me di cuenta de que estaba acumulando muchísimos datos que apenas sabía interpretar: ratio vertical medio, potencias, carga aguda, y acabé construyendo un private trainer conectado con Strava.';
+  const root = mount(`
+    <div componentkey="FeedType_MAIN_FEED:g1" id="garmin-post">
+      <div class="update-components-text">
+        <span dir="ltr">${body}</span>
+        <button type="button">… más</button>
+      </div>
+      <a href="https://github.com/AgustinG-git/private-trainer">GitHub - private-trainer</a>
+    </div>`);
+  const item = extractLinkedInPost(root.querySelector('#garmin-post') as HTMLElement);
+  assert.ok(item);
+  assert.ok(item!.text.includes('private trainer') || item!.text.includes('Strava'), item!.text);
+  assert.ok(item!.text.length > 100, `too short: ${item!.text.length}`);
+});
