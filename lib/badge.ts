@@ -111,17 +111,18 @@ function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
   );
   if (place(media, 'beforebegin')) return;
 
-  // LinkedIn: sit above the social action bar / counts, not after every nested node.
-  const liAction =
-    article.querySelector(
-      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, .feed-shared-social-counts',
-    ) ?? null;
-  if (liAction && place(liAction, 'beforebegin')) return;
-  const liText =
-    article.querySelector(
-      '.feed-shared-update-v2__commentary, .update-components-text, .feed-shared-inline-show-more-text',
-    ) ?? null;
-  if (liText && place(liText, 'afterend')) return;
+  // LinkedIn: badge at the top of the card (above actor / content), not under the post.
+  const isLinkedInCard =
+    article.hasAttribute('data-urn') ||
+    article.classList.contains('feed-shared-update-v2') ||
+    !!article.querySelector(
+      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity',
+    );
+  if (isLinkedInCard) {
+    article.prepend(row);
+    if (!inMediaChrome(row)) return;
+    row.remove();
+  }
 
   article.append(row);
 }

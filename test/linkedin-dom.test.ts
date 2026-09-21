@@ -129,3 +129,36 @@ test('regression stacked badges: repeated applyVerdict keeps one row', () => {
   assert.ok(ownSlopRow(article));
   assert.match(ownSlopRow(article)?.textContent ?? '', /Slop \| 2%/);
 });
+
+test('regression LI badge placement: row is first child of the card', () => {
+  const root = mount(`
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7005555555" id="top-post">
+      <div class="update-components-actor__title"><a href="/in/x"><span aria-hidden="true">Author</span></a></div>
+      <div class="feed-shared-update-v2__commentary update-components-text">
+        <span dir="ltr">Badge must sit above this LinkedIn post body and not under the actions.</span>
+      </div>
+      <div class="social-details-social-activity"><button>Recomendar</button><button>Comentar</button></div>
+    </div>`);
+  const article = root.querySelector('#top-post') as HTMLElement;
+  applyVerdict(
+    article,
+    {
+      tweetId: 'li-activity-7005555555',
+      label: 'not_slop' as const,
+      slopP: 0.02,
+      notP: 0.98,
+      model: 'jev-latest',
+    },
+    { ...DEFAULT_SETTINGS, showNotSlop: true },
+  );
+  const rows = article.querySelectorAll('.slop-guard-row');
+  assert.equal(rows.length, 1);
+  assert.equal(article.firstElementChild, rows[0], 'badge row must be the first child of the LI card');
+  const action = article.querySelector('.social-details-social-activity');
+  assert.ok(action);
+  const kids = [...article.children];
+  assert.ok(
+    kids.indexOf(rows[0]!) < kids.indexOf(action!),
+    'badge must appear before Recomendar/Comentar',
+  );
+});

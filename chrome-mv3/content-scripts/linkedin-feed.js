@@ -373,10 +373,11 @@
 		if (place(findActionBar(article), "beforebegin")) return;
 		if (place(queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article && !inMediaChrome(node)) ?? null, "afterend")) return;
 		if (place(article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]"), "beforebegin")) return;
-		const liAction = article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, .feed-shared-social-counts") ?? null;
-		if (liAction && place(liAction, "beforebegin")) return;
-		const liText = article.querySelector(".feed-shared-update-v2__commentary, .update-components-text, .feed-shared-inline-show-more-text") ?? null;
-		if (liText && place(liText, "afterend")) return;
+		if (article.hasAttribute("data-urn") || article.classList.contains("feed-shared-update-v2") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity")) {
+			article.prepend(row);
+			if (!inMediaChrome(row)) return;
+			row.remove();
+		}
 		article.append(row);
 	}
 	function upsertBadge(article, text, tone, dot) {
