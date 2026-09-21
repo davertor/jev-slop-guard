@@ -5,6 +5,7 @@ var REPOST_RE = /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwit
 var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 var SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 var MIN_TEXT = 4;
+var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"]";
 function tweetIdFromHref(href) {
 	return href.match(STATUS_RE)?.[1] ?? null;
 }
@@ -60,12 +61,12 @@ function isRetweetCard(article) {
 	}
 	return false;
 }
-/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
+/** Own tweetText first; then lang-caption; retweet shells fall back to nested. Never a node inside the player. */
 function findTweetTextEl(article) {
-	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
-	for (const node of langCaptionNodes(article, false)) return node;
-	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent)) return node;
-	for (const node of langCaptionNodes(article, true)) return node;
+	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent) && !inMediaChrome(node)) return node;
+	for (const node of langCaptionNodes(article, false)) if (!inMediaChrome(node)) return node;
+	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent) && !inMediaChrome(node)) return node;
+	for (const node of langCaptionNodes(article, true)) if (!inMediaChrome(node)) return node;
 	return null;
 }
 function findActionBar(article) {
@@ -101,6 +102,7 @@ function collectTweetText(article, allowNested) {
 	const parts = [];
 	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) {
 		if (!allowNested && !belongsToArticle(node, article)) continue;
+		if (inMediaChrome(node)) continue;
 		const t = cleanText(node.textContent);
 		if (SHOW_MORE_RE.test(t)) continue;
 		if (allowNested) {
@@ -126,7 +128,8 @@ function langCaptionNodes(article, allowNested) {
 	const out = [];
 	for (const node of queryDeep(article, "div[lang], span[lang]")) {
 		if (!allowNested && !belongsToArticle(node, article)) continue;
-		if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"], [role=\"group\"]")) continue;
+		if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"]")) continue;
+		if (inMediaChrome(node)) continue;
 		if (node.getAttribute("data-testid") === "tweetText") continue;
 		const t = cleanText(node.textContent);
 		if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
@@ -138,10 +141,13 @@ function ownTweetId(article) {
 	return collectTweetId(article, false) ?? collectTweetId(article, true) ?? collectIdAround(article);
 }
 function collectTweetId(article, allowNested) {
-	const timeLink = queryDeep(article, "time")[0]?.closest("a");
-	if (timeLink && (allowNested || belongsToArticle(timeLink, article))) {
-		const id = tweetIdFromHref(timeLink.getAttribute("href") ?? "");
-		if (id) return id;
+	for (const time of queryDeep(article, "time")) {
+		if (isDurationTime(time)) continue;
+		const timeLink = time.closest("a");
+		if (timeLink && (allowNested || belongsToArticle(timeLink, article))) {
+			const id = tweetIdFromHref(timeLink.getAttribute("href") ?? "");
+			if (id) return id;
+		}
 	}
 	for (const a of queryDeep(article, "a[href*=\"/status/\"]")) {
 		if (!allowNested && !belongsToArticle(a, article)) continue;
@@ -159,8 +165,10 @@ function collectIdAround(article) {
 	}
 	const scope = article.closest("[data-testid=\"cellInnerDiv\"]") ?? article.parentElement;
 	if (!scope) return null;
-	const timeLink = queryDeep(scope, "time")[0]?.closest("a");
-	if (timeLink) {
+	for (const time of queryDeep(scope, "time")) {
+		if (isDurationTime(time)) continue;
+		const timeLink = time.closest("a");
+		if (!timeLink) continue;
 		const id = tweetIdFromHref(timeLink.getAttribute("href") ?? "");
 		if (id) return id;
 	}
@@ -222,6 +230,14 @@ function cleanText(value) {
 function usableText(value) {
 	const t = cleanText(value);
 	return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+}
+function inMediaChrome(node) {
+	return Boolean(node.closest(MEDIA_CHROME));
+}
+function isDurationTime(el) {
+	const dt = el.getAttribute("datetime") ?? "";
+	if (/^PT/i.test(dt)) return true;
+	return /^\d+:\d{2}(:\d{2})?$/.test(cleanText(el.textContent));
 }
 function syntheticId(handle, text) {
 	const who = handle.replace(/^@/, "") || "anon";
