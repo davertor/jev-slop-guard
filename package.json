@@ -2,7 +2,7 @@
   "name": "slop-guard",
   "description": "Label and hide AI-generated slop posts on X (Twitter).",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -14,11 +14,12 @@
     "zip": "wxt zip"
   },
   "devDependencies": {
+    "linkedom": "^0.18.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.1.5",
     "web-ext": "^10.5.0",
-    "wxt": "^0.21.3",
-    "tsx": "^4.23.15"
+    "wxt": "^0.21.3"
   },
   "dependencies": {
     "@typesafe-ai/sdk": "0.6.0"

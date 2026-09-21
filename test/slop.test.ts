@@ -23,6 +23,8 @@ test('retweet socialContext matches English and Spanish X copy', () => {
   assert.equal(isRetweetContext('Ada reposted'), true);
   assert.equal(isRetweetContext('Ada retweeted'), true);
   assert.equal(isRetweetContext('Maya ha retwitteado'), true);
+  assert.equal(isRetweetContext('Luis ha reposteado'), true);
+  assert.equal(isRetweetContext('Javier López retuiteó'), true);
   assert.equal(isRetweetContext('liked this'), false);
 });
 
