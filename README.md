@@ -30,10 +30,10 @@ own API key.
 
 <p align="center">
   <a href="#what-it-does">What it does</a> ·
+  <a href="#requirements">Requirements</a> ·
   <a href="#try-it-in-your-chrome">Try it in your Chrome</a> ·
   <a href="#settings">Settings</a> ·
-  <a href="#privacy-and-permissions">Privacy and permissions</a> ·
-  <a href="#development">Development</a> ·
+  <a href="#privacy">Privacy</a> ·
   <a href="#references">References</a>
 </p>
 
@@ -52,10 +52,17 @@ Works on **[x.com](https://x.com)** (home timeline, also `twitter.com`) and
   small concurrency limit and a per-post cache, so a post is scored once.
 - Promoted and sponsored posts and "Who to follow" widgets are skipped.
 
-## Try it in your Chrome
+## Requirements
 
-You need a TypeSafe API key from [console.typesafe.ai](https://console.typesafe.ai).
-An OpenRouter key works as a fallback provider.
+- **Chrome**, or any browser that loads Manifest V3 extensions.
+- **An API key** for one of the two providers. Every post is classified by
+  Jev on that account, so usage is billed to you.
+  - [TypeSafe AI](https://console.typesafe.ai), the default provider.
+  - [OpenRouter](https://openrouter.ai/keys). Allow TypeSafe under
+    OpenRouter Settings → Privacy, or the decisions endpoint refuses the call.
+- **pnpm**, only if you build from source.
+
+## Try it in your Chrome
 
 **Option A — prebuilt, no toolchain.** The repo ships the built extension in
 [`chrome-mv3/`](chrome-mv3/). Clone or download the repo and skip to step 3.
@@ -98,55 +105,18 @@ classification request described below.
 | Blur + SLOP stamp | on | Off keeps the pills but never covers a post |
 | Show badge when under threshold | on | Off hides the green pill and marks only **Stop** |
 
-## Privacy and permissions
+## Privacy
 
-For each post the extension sends **the post text and the author handle** to
-the provider you picked, and nothing else: no cookies, no URLs, no browsing
-history. The key is stored locally and never committed anywhere.
-
-| Permission | Why |
-| --- | --- |
-| `storage` | keep your settings and key |
-| `scripting`, `tabs` | inject the content script into already-open X and LinkedIn tabs |
-| `x.com`, `twitter.com`, `linkedin.com` | read posts and draw badges |
-| `api.typesafe.ai` | classification requests |
-| `openrouter.ai` | classification requests when Provider is OpenRouter |
-
-## Development
-
-Built with [WXT](https://wxt.dev) and TypeScript. Tests run on
-[linkedom](https://github.com/WebReflection/linkedom) against real feed markup.
-
-```sh
-pnpm dev        # opens a browser with the extension loaded, hot reload
-pnpm build      # production build to .output/chrome-mv3
-pnpm zip        # distributable zip
-pnpm compile    # tsc --noEmit
-pnpm test       # node test runner via tsx
-```
-
-```text
-entrypoints/
-  background.ts             injects content scripts into open tabs
-  x-timeline.content/       X home timeline
-  linkedin-feed.content/    LinkedIn feed
-  popup/  options/          settings UI
-  playground/               fixture page for badge work without a key
-lib/
-  jev.ts                    TypeSafe / OpenRouter client and the slop Choice
-  tweet.ts  linkedin.ts     DOM extraction per site
-  timeline-guard.ts         observe, queue, cache, badge
-  badge.ts  settings.ts     rendering and storage
-test/                       DOM extraction and verdict tests
-chrome-mv3/                 prebuilt extension, rebuilt on each release
-```
+For each post the extension sends the post text and the author handle to the
+provider you picked, and nothing else. Your key and settings stay in
+`chrome.storage.local`. The extension asks for access to `x.com`,
+`twitter.com` and `linkedin.com` to read posts and draw badges, and to
+`api.typesafe.ai` and `openrouter.ai` to send the classification requests.
 
 ## References
 
 - [Robin Bilgil's real-time slop detector demo](https://x.com/RBilgil/status/2100976648552169805),
   the idea this extension copies: a pill under the post, then blur and a **SLOP** stamp.
-- [TypeSafe Jev docs](https://docs.typesafe.ai/introduction) and the
-  [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk) package.
 
 ## License
 
