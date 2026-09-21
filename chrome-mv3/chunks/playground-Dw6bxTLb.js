@@ -5,20 +5,38 @@ var REPOST_RE = /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwit
 var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 var SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 var MIN_TEXT = 4;
-var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"]";
+var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.layoutLarge.media\"], [data-testid=\"card.layoutSmall.media\"]";
+var PLAYER_OVERLAY_RE = /^(Original|AI|GIF|Play|Pause|Video|Live)$/i;
+var CAPTION_SEL = "div[lang], span[lang], div[dir=\"auto\"], span[dir=\"auto\"]";
 function tweetIdFromHref(href) {
 	return href.match(STATUS_RE)?.[1] ?? null;
 }
 function extractTweet(article) {
-	if (isPromoted(article)) return null;
+	return explainExtract(article).item;
+}
+/** Why extract failed — probe / console.debug. Reasons stay short. */
+function explainExtract(article) {
+	if (isPromoted(article)) return {
+		ok: false,
+		reason: "promoted",
+		item: null
+	};
 	const text = ownTweetText(article);
-	if (text.length < MIN_TEXT) return null;
+	if (text.length < MIN_TEXT) return {
+		ok: false,
+		reason: "no-text",
+		item: null
+	};
 	const handle = ownHandle(article);
 	return {
-		id: ownTweetId(article) ?? syntheticId(handle, text),
-		text: text.slice(0, 4e3),
-		handle,
-		article
+		ok: true,
+		reason: "ok",
+		item: {
+			id: ownTweetId(article) ?? syntheticId(handle, text),
+			text: text.slice(0, 4e3),
+			handle,
+			article
+		}
 	};
 }
 /**
@@ -61,13 +79,13 @@ function isRetweetCard(article) {
 	}
 	return false;
 }
-/** Own tweetText first; then lang-caption; retweet shells fall back to nested. Never a node inside the player. */
+/** Own tweetText first; then lang/dir=auto caption; retweet shells fall back to nested. Never a node inside the player. */
 function findTweetTextEl(article) {
 	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent) && !inMediaChrome(node)) return node;
 	for (const node of langCaptionNodes(article, false)) if (!inMediaChrome(node)) return node;
 	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent) && !inMediaChrome(node)) return node;
 	for (const node of langCaptionNodes(article, true)) if (!inMediaChrome(node)) return node;
-	return null;
+	return labelledByNode(article, true);
 }
 function findActionBar(article) {
 	for (const testid of [
@@ -77,7 +95,7 @@ function findActionBar(article) {
 	]) for (const el of queryDeep(article, `[data-testid="${testid}"]`)) {
 		if (!belongsToArticle(el, article)) continue;
 		const group = el.closest("[role=\"group\"]");
-		if (group instanceof HTMLElement && belongsToArticle(group, article)) return group;
+		if (group instanceof HTMLElement && belongsToArticle(group, article) && !group.querySelector("[data-testid=\"User-Name\"]")) return group;
 		return el;
 	}
 	return null;
@@ -104,7 +122,7 @@ function collectTweetText(article, allowNested) {
 		if (!allowNested && !belongsToArticle(node, article)) continue;
 		if (inMediaChrome(node)) continue;
 		const t = cleanText(node.textContent);
-		if (SHOW_MORE_RE.test(t)) continue;
+		if (SHOW_MORE_RE.test(t) || PLAYER_OVERLAY_RE.test(t)) continue;
 		if (allowNested) {
 			if (t.length >= MIN_TEXT) return t;
 			continue;
@@ -122,23 +140,50 @@ function collectFallbackText(article, allowNested) {
 	const parts = [];
 	for (const node of langCaptionNodes(article, allowNested)) parts.push(cleanText(node.textContent));
 	parts.sort((a, b) => b.length - a.length);
-	return parts[0] ?? "";
+	return parts[0] || labelledByText(article, allowNested);
 }
 function langCaptionNodes(article, allowNested) {
 	const out = [];
-	for (const node of queryDeep(article, "div[lang], span[lang]")) {
+	for (const node of queryDeep(article, CAPTION_SEL)) {
 		if (!allowNested && !belongsToArticle(node, article)) continue;
 		if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"]")) continue;
 		if (inMediaChrome(node)) continue;
 		if (node.getAttribute("data-testid") === "tweetText") continue;
 		const t = cleanText(node.textContent);
-		if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
+		if (!t || SHOW_MORE_RE.test(t) || PLAYER_OVERLAY_RE.test(t) || t.length < MIN_TEXT) continue;
 		out.push(node);
 	}
 	return out;
 }
+function labelledByNode(article, allowNested) {
+	const ids = /* @__PURE__ */ new Set();
+	const labelled = [article, ...queryDeep(article, "[aria-labelledby]")];
+	for (const el of labelled) {
+		if (!allowNested && el !== article && !belongsToArticle(el, article)) continue;
+		for (const id of (el.getAttribute("aria-labelledby") ?? "").split(/\s+/)) if (id) ids.add(id);
+	}
+	let best = null;
+	let bestLen = 0;
+	for (const id of ids) {
+		const node = article.querySelector(`[id="${id}"]`) ?? document.getElementById(id);
+		if (!(node instanceof HTMLElement)) continue;
+		if (!allowNested && !belongsToArticle(node, article)) continue;
+		if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"]")) continue;
+		if (inMediaChrome(node)) continue;
+		const t = cleanText(node.textContent);
+		if (!usableText(t)) continue;
+		if (t.length > bestLen) {
+			best = node;
+			bestLen = t.length;
+		}
+	}
+	return best;
+}
+function labelledByText(article, allowNested) {
+	return cleanText(labelledByNode(article, allowNested)?.textContent);
+}
 function ownTweetId(article) {
-	return collectTweetId(article, false) ?? collectTweetId(article, true) ?? collectIdAround(article);
+	return collectTweetId(article, false) ?? collectIdAround(article) ?? collectTweetId(article, true);
 }
 function collectTweetId(article, allowNested) {
 	for (const time of queryDeep(article, "time")) {
@@ -165,14 +210,19 @@ function collectIdAround(article) {
 	}
 	const scope = article.closest("[data-testid=\"cellInnerDiv\"]") ?? article.parentElement;
 	if (!scope) return null;
+	const ownLink = (a) => {
+		const owner = tweetCardOwner(a);
+		return !owner || owner === article || owner === scope;
+	};
 	for (const time of queryDeep(scope, "time")) {
 		if (isDurationTime(time)) continue;
 		const timeLink = time.closest("a");
-		if (!timeLink) continue;
+		if (!timeLink || !ownLink(timeLink)) continue;
 		const id = tweetIdFromHref(timeLink.getAttribute("href") ?? "");
 		if (id) return id;
 	}
 	for (const a of queryDeep(scope, "a[href*=\"/status/\"]")) {
+		if (!ownLink(a)) continue;
 		const id = tweetIdFromHref(a.getAttribute("href") ?? "");
 		if (id) return id;
 	}
@@ -220,19 +270,27 @@ function hasOwnAuthor(article) {
 	}
 	return false;
 }
-/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. */
+/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. Face-cam overlays sit inside the player and may carry User-Name. */
 function isMediaHusk(el) {
-	return el.getAttribute("data-testid") === "tweet" && !hasOwnAuthor(el);
+	if (el.getAttribute("data-testid") !== "tweet") return false;
+	if (el.parentElement && el.closest(MEDIA_CHROME)) return true;
+	return !hasOwnAuthor(el);
 }
 function cleanText(value) {
 	return (value ?? "").replace(/\s+/g, " ").trim();
 }
 function usableText(value) {
 	const t = cleanText(value);
-	return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+	return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t) && !PLAYER_OVERLAY_RE.test(t);
 }
 function inMediaChrome(node) {
-	return Boolean(node.closest(MEDIA_CHROME));
+	if (node.closest(MEDIA_CHROME)) return true;
+	let root = node.getRootNode();
+	while (root.host instanceof Element) {
+		if (root.host.matches(MEDIA_CHROME) || root.host.closest(MEDIA_CHROME)) return true;
+		root = root.host.getRootNode();
+	}
+	return false;
 }
 function isDurationTime(el) {
 	const dt = el.getAttribute("datetime") ?? "";
@@ -257,6 +315,7 @@ function articlesFromCells(root) {
 		const real = realTweetCards(cell);
 		if (real.length > 0) {
 			out.push(...real);
+			if (hasOwnTweetBody(cell) && !real.includes(cell)) out.push(cell);
 			continue;
 		}
 		if (queryDeep(cell, "[data-testid=\"tweetText\"]").length > 0 || queryDeep(cell, "[data-testid=\"User-Name\"]").length > 0 || langCaptionNodes(cell, true).length > 0) out.push(cell);
@@ -339,28 +398,19 @@ function ownOverlay(article) {
 	return null;
 }
 function insertBadgeRow(article, row) {
+	const place = (target, where) => {
+		if (!target) return false;
+		target.insertAdjacentElement(where, row);
+		if (!inMediaChrome(row)) return true;
+		row.remove();
+		return false;
+	};
 	const tweetText = findTweetTextEl(article);
-	if (tweetText && belongsToArticle(tweetText, article)) {
-		tweetText.insertAdjacentElement("afterend", row);
-		return;
-	}
-	const actions = findActionBar(article);
-	if (actions) {
-		actions.insertAdjacentElement("beforebegin", row);
-		return;
-	}
-	const nested = queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article);
-	if (nested) {
-		nested.insertAdjacentElement("afterend", row);
-		return;
-	}
-	if (tweetText) {
-		tweetText.insertAdjacentElement("afterend", row);
-		return;
-	}
-	const media = article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"card.wrapper\"]");
-	if (media) media.insertAdjacentElement("beforebegin", row);
-	else article.append(row);
+	if (tweetText && belongsToArticle(tweetText, article) && !inMediaChrome(tweetText) && place(tweetText, "afterend")) return;
+	if (place(findActionBar(article), "beforebegin")) return;
+	if (place(queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article && !inMediaChrome(node)) ?? null, "afterend")) return;
+	if (place(article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]"), "beforebegin")) return;
+	article.append(row);
 }
 function upsertBadge(article, text, tone, dot) {
 	let row = ownSlopRow(article);
