@@ -88,6 +88,24 @@ function ownOverlay(article: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function isLinkedInCard(article: HTMLElement): boolean {
+  return (
+    article.hasAttribute('data-urn') ||
+    article.hasAttribute('data-id') ||
+    article.classList.contains('feed-shared-update-v2') ||
+    article.classList.contains('occludable-update') ||
+    !!article.querySelector(
+      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity',
+    )
+  );
+}
+
+/** Keep LinkedIn badge pinned as the first child (top of the card). */
+export function placeLinkedInBadge(article: HTMLElement, row: HTMLElement): void {
+  if (article.firstElementChild !== row) article.prepend(row);
+  row.dataset.slopLiPlacement = 'top';
+}
+
 function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
   const place = (target: Element | null, where: InsertPosition): boolean => {
     if (!target) return false;
@@ -96,6 +114,13 @@ function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
     row.remove();
     return false;
   };
+
+  // LinkedIn first: never fall through to X anchors or append (looks like bottom-of-post).
+  if (isLinkedInCard(article)) {
+    placeLinkedInBadge(article, row);
+    if (!inMediaChrome(row)) return;
+    row.remove();
+  }
 
   const tweetText = findTweetTextEl(article);
   if (tweetText && belongsToArticle(tweetText, article) && !inMediaChrome(tweetText) && place(tweetText, 'afterend')) {
@@ -111,19 +136,6 @@ function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
   );
   if (place(media, 'beforebegin')) return;
 
-  // LinkedIn: badge at the top of the card (above actor / content), not under the post.
-  const isLinkedInCard =
-    article.hasAttribute('data-urn') ||
-    article.classList.contains('feed-shared-update-v2') ||
-    !!article.querySelector(
-      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity',
-    );
-  if (isLinkedInCard) {
-    article.prepend(row);
-    if (!inMediaChrome(row)) return;
-    row.remove();
-  }
-
   article.append(row);
 }
 
@@ -133,6 +145,9 @@ function upsertBadge(article: HTMLElement, text: string, tone: string, dot: bool
     row = document.createElement('div');
     row.className = ROW_CLASS;
     insertBadgeRow(article, row);
+  } else if (isLinkedInCard(article)) {
+    // Re-home leftover rows from older builds that sat under the action bar.
+    placeLinkedInBadge(article, row);
   }
   let badge = row.querySelector<HTMLElement>(`.${BADGE_CLASS}`);
   if (!badge) {
