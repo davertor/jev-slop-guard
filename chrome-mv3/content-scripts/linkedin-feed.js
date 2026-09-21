@@ -765,7 +765,7 @@
 		if (document.querySelector(".slop-guard-banner")) return;
 		const banner = document.createElement("div");
 		banner.className = "slop-guard-banner";
-		banner.textContent = message ?? "Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.";
+		banner.textContent = message ?? "Jev Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.";
 		document.body.append(banner);
 	}
 	//#endregion
@@ -785,7 +785,7 @@
 				listArticles: listLinkedInArticles,
 				extract: extractLinkedInPost,
 				undoKey: "slopGuard.undone.linkedin.v1",
-				missingKeyMessage: "Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup."
+				missingKeyMessage: "Jev Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup."
 			});
 		}
 	});
@@ -809,7 +809,7 @@
 			bar.style.cssText = "position:fixed;left:12px;bottom:40px;z-index:2147483646;padding:6px 10px;border-radius:999px;background:#553011;color:#fff;font:12px/1.3 system-ui,sans-serif;pointer-events:none;";
 			document.body.append(bar);
 		}
-		bar.textContent = `Slop Guard LI · cards ${cards} · ready ${ready}`;
+		bar.textContent = `Jev Slop Guard LI · cards ${cards} · ready ${ready}`;
 	}
 	//#endregion
 	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/internal/logger.mjs
@@ -1056,7 +1056,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/linkedin-feed.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/davertor/Python_projects/jev-slop-detector/entrypoints/linkedin-feed.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

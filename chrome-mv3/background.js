@@ -1082,7 +1082,7 @@ var background = (function() {
 			if (settings.paused) return {
 				ok: false,
 				code: "PAUSED",
-				error: "Slop Guard is paused."
+				error: "Jev Slop Guard is paused."
 			};
 			if (!settings.apiKey.trim()) return {
 				ok: false,
@@ -1113,7 +1113,7 @@ var background = (function() {
 		}
 	}
 	//#endregion
-	//#region \0virtual:wxt-background-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/background.ts
+	//#region \0virtual:wxt-background-entrypoint?/Users/davertor/Python_projects/jev-slop-detector/entrypoints/background.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),
