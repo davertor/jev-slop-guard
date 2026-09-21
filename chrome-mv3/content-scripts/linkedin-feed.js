@@ -130,10 +130,14 @@
 	}
 	//#endregion
 	//#region lib/tweet.ts
-	/** Own tweetText first; retweet shells fall back to the nested original. */
+	var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
+	var MIN_TEXT = 4;
+	/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
 	function findTweetTextEl(article) {
-		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article)) return node;
-		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) return node;
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
+		for (const node of langCaptionNodes(article, false)) return node;
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent)) return node;
+		for (const node of langCaptionNodes(article, true)) return node;
 		return null;
 	}
 	function findActionBar(article) {
@@ -149,12 +153,54 @@
 		}
 		return null;
 	}
+	function langCaptionNodes(article, allowNested) {
+		const out = [];
+		for (const node of queryDeep(article, "div[lang], span[lang]")) {
+			if (!allowNested && !belongsToArticle(node, article)) continue;
+			if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"], [role=\"group\"]")) continue;
+			if (node.getAttribute("data-testid") === "tweetText") continue;
+			const t = cleanText(node.textContent);
+			if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
+			out.push(node);
+		}
+		return out;
+	}
 	function belongsToArticle(node, article) {
 		return tweetCardOwner(node) === article;
 	}
 	function tweetCardOwner(node) {
-		const owner = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
-		return owner instanceof HTMLElement ? owner : null;
+		let scope = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
+		while (scope) {
+			if (scope.getAttribute("data-testid") === "tweet" && !isMediaHusk(scope)) return scope;
+			if (scope.getAttribute("data-testid") === "cellInnerDiv" && realTweetCards(scope).length === 0) return scope;
+			const parent = scope.parentElement;
+			scope = parent ? parent.closest("[data-testid=\"tweet\"]") ?? parent.closest("[data-testid=\"cellInnerDiv\"]") : null;
+		}
+		const fallback = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
+		return fallback instanceof HTMLElement ? fallback : null;
+	}
+	function hasOwnAuthor(article) {
+		for (const node of article.querySelectorAll("[data-testid=\"User-Name\"]")) {
+			if (!(node instanceof HTMLElement)) continue;
+			const owner = node.closest("[data-testid=\"tweet\"]");
+			if (owner === article) return true;
+			if (!owner && article.getAttribute("data-testid") === "cellInnerDiv") return true;
+		}
+		return false;
+	}
+	/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. */
+	function isMediaHusk(el) {
+		return el.getAttribute("data-testid") === "tweet" && !hasOwnAuthor(el);
+	}
+	function cleanText(value) {
+		return (value ?? "").replace(/\s+/g, " ").trim();
+	}
+	function usableText(value) {
+		const t = cleanText(value);
+		return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+	}
+	function realTweetCards(root) {
+		return queryDeep(root, "[data-testid=\"tweet\"]").filter((node) => !isMediaHusk(node));
 	}
 	/** querySelectorAll plus shadow roots (X sometimes wraps cells). */
 	function queryDeep(root, selector) {
@@ -419,7 +465,13 @@
 				const state = article.getAttribute("data-slop-guard");
 				if (!state) return;
 				const item = adapter.extract(article);
-				if (!item) return;
+				if (!item) {
+					if (state === "pending") {
+						const started = Number(article.dataset.slopPendingAt ?? 0);
+						if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) slopFeed.reset(article);
+					}
+					return;
+				}
 				if (article.dataset.slopId && article.dataset.slopId !== item.id) {
 					slopFeed.reset(article);
 					return;
