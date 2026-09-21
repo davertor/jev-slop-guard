@@ -788,3 +788,176 @@ test('screenshot miss-quote-monos-video: nested quoted video card also badges', 
   assert.ok(quoted, 'quoted video card was dropped');
   assertReadyBadge(quoted, '11012', /Neuralink/);
 });
+
+/**
+ * miss-nailthy-video.png — @nailthy62 long caption + “Mostrar más” + native
+ * video (drape UI). NO badge.
+ *
+ * Live X deltas vs 0.1.15 Linus fixture:
+ * - Caption is tweetText + lang + dir=auto (Linus was dir=auto only)
+ * - “Mostrar más” sits in its own wrapper (parent text is just the link)
+ * - previewInterstitial wraps caption + player chrome (not only the overlay)
+ * - “original” inset is a nested [data-testid=tweet] WITH User-Name that is a
+ *   sibling of videoComponent (not inside the player, unlike Linus face-cam)
+ * - Player chrome: “stop mirror”, duration 0:17, tweetText “original”
+ */
+function fixtureMissNailthyVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/i/status/12001" aria-label="View post"></a>
+      <article data-testid="tweet" id="nailthy">
+        <div role="group" aria-labelledby="nt-name nt-caption" aria-label="Nailthy Tang jev is insane stop mirror original 0:17">
+          <div id="nt-name" data-testid="User-Name">
+            <a href="/nailthy62"><span>Nailthy Tang</span></a>
+            <a href="/nailthy62">@nailthy62</a>
+          </div>
+          <time>19 sept.</time>
+          <div data-testid="previewInterstitial">
+            <div id="nt-caption" data-testid="tweetText" lang="en" dir="auto">jev is insane it makes realtime virtual try-on hauls possible. built this experiment for Drape with typesafeai. i talk, jev reads transcript plus what im wearing, picks from my closet, changes my outfit in realtime. cost 0.0011 per decision, time 620ms per decision</div>
+            <div>
+              <div data-testid="tweet-text-show-more-link">Mostrar más</div>
+            </div>
+            <div data-testid="tweetText">original</div>
+            <div data-testid="videoComponent">
+              <div data-testid="videoPlayer">
+                <div aria-live="polite" aria-label="Video player live preview">
+                  <time datetime="PT17S">0:17</time>
+                  <div dir="auto">stop mirror</div>
+                </div>
+              </div>
+            </div>
+            <div data-testid="tweet" id="nailthy-original">
+              <div data-testid="User-Name"><a href="/nailthy62">@nailthy62</a></div>
+              <div dir="auto">original</div>
+            </div>
+          </div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+/**
+ * false-who-to-follow.png — sidebar “Who to follow” / timeline “A quién seguir”
+ * UserCells with Follow/Seguir. 0.1.15 lists those cells (User-Name, no tweet)
+ * and stamps them. Control timeline tweet with a Seguir button must stay.
+ */
+function fixtureFalseWhoToFollow(): string {
+  return `
+    ${tweetCard({
+      id: '12100',
+      handle: 'samu2kdotcom',
+      name: 'Samu 2k',
+      text: 'si gastas menos de 1200M de tokens mensuales te sale mas a cuenta OpenRouter',
+    })}
+    <article data-testid="tweet" id="follow-on-tweet">
+      ${tweetBody({
+        id: '12101',
+        handle: 'ada',
+        name: 'Ada',
+        text: 'a normal timeline tweet that also shows a Seguir button',
+      })}
+      <button type="button">Seguir</button>
+    </article>
+    <div data-testid="sidebarColumn">
+      <aside>
+        <h2><span>Who to follow</span></h2>
+        <div data-testid="cellInnerDiv" id="wtf-pablo">
+          <div data-testid="UserCell">
+            <div data-testid="User-Name">
+              <a href="/pdepablocom"><span>pablo</span></a>
+              <a href="/pdepablocom">@pdepablocom</a>
+            </div>
+            <div dir="auto">head of design @genLayer</div>
+            <button type="button">Seguir</button>
+          </div>
+        </div>
+        <div data-testid="cellInnerDiv" id="wtf-next">
+          <div data-testid="UserCell">
+            <div data-testid="User-Name">
+              <a href="/someone"><span>someone</span></a>
+              <a href="/someone">@someone</a>
+            </div>
+            <div lang="en">builds models and writes essays about them</div>
+            <button type="button">Follow</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <div data-testid="cellInnerDiv" id="wtf-es">
+      <section>
+        <h2 role="heading">A quién seguir</h2>
+        <div data-testid="UserCell">
+          <div data-testid="User-Name">
+            <a href="/eva"><span>eva</span></a>
+            <a href="/eva">@eva</a>
+          </div>
+          <div dir="auto">diseña productos en madrid y da charlas</div>
+          <button type="button">Seguir</button>
+        </div>
+      </section>
+    </div>`;
+}
+
+test('screenshot miss-nailthy-video: tweetText+Mostrar más+original inset extracts and badges', () => {
+  const root = mount(fixtureMissNailthyVideo());
+  const cards = listTweetArticles(root);
+  const nailthy = cards.find((card) => card.id === 'nailthy');
+  assert.ok(nailthy, 'Nailthy video card was not listed');
+  const info = explainExtract(nailthy);
+  assert.equal(info.ok, true, info.reason);
+  const item = extractTweet(nailthy);
+  assert.ok(item);
+  assert.equal(item.text.includes('original'), false);
+  assert.equal(item.text.includes('Mostrar más'), false);
+  assert.equal(item.text.includes('stop mirror'), false);
+  assertReadyBadge(nailthy, '12001', /virtual try-on/);
+  assert.equal(item.handle, '@nailthy62');
+  const inset = root.querySelector('#nailthy-original') as HTMLElement;
+  assert.equal(cards.includes(inset), false);
+});
+
+test('screenshot false-who-to-follow: UserCells are not listed, extracted, or stamped', () => {
+  const root = mount(fixtureFalseWhoToFollow());
+  const cards = listTweetArticles(root);
+  const ids = cards.map((card) => card.id);
+  assert.equal(ids.includes('wtf-pablo'), false);
+  assert.equal(ids.includes('wtf-next'), false);
+  assert.equal(ids.includes('wtf-es'), false);
+  for (const card of cards) {
+    assert.equal(card.closest('[data-testid="UserCell"]'), null);
+    assert.equal(card.querySelector('[data-testid="UserCell"]'), null);
+    assert.equal(/who to follow|a qui[eé]n seguir/i.test(card.textContent ?? ''), false);
+  }
+  assert.deepEqual(listedIds(root), ['12100', '12101']);
+
+  for (const id of ['wtf-pablo', 'wtf-next', 'wtf-es']) {
+    const cell = root.querySelector(`#${id}`) as HTMLElement;
+    assert.ok(cell);
+    const info = explainExtract(cell);
+    assert.equal(info.ok, false, `${id} should not extract`);
+    assert.equal(extractTweet(cell), null);
+    assert.equal(cards.includes(cell), false);
+  }
+
+  for (const card of cards) {
+    const item = extractTweet(card);
+    assert.ok(item);
+    applyVerdict(
+      card,
+      { tweetId: item.id, label: 'slop', slopP: 0.96, notP: 0.04, model: 'jev-latest' },
+      DEFAULT_SETTINGS,
+    );
+  }
+  assert.equal(root.querySelector('[data-testid="UserCell"] .slop-guard-row'), null);
+  assert.equal(root.querySelector('[data-testid="UserCell"] .slop-guard-overlay'), null);
+  assert.equal(root.querySelector('#wtf-pablo.slop-guard-stamped, #wtf-next.slop-guard-stamped, #wtf-es.slop-guard-stamped'), null);
+  assert.ok(ownSlopRow(root.querySelector('#follow-on-tweet') as HTMLElement));
+});
+
+test('screenshot false-who-to-follow: timeline tweet with Seguir still badges', () => {
+  const root = mount(fixtureFalseWhoToFollow());
+  const tweet = listTweetArticles(root).find((card) => card.id === 'follow-on-tweet');
+  assert.ok(tweet, 'timeline tweet with Seguir was excluded');
+  assertReadyBadge(tweet, '12101', /Seguir button/);
+});
