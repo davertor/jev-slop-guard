@@ -1,4 +1,5 @@
-import type { JudgeResult } from './messages';
+import { chromeApi, isXUrl, sendRuntimeMessage, sendTabMessage } from './chrome-msg';
+import type { InjectXResult, JudgeResult, XStatusResult } from './messages';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './settings';
 
 export const SETTINGS_FORM_HTML = `
@@ -7,11 +8,10 @@ export const SETTINGS_FORM_HTML = `
       <p class="eyebrow">Slop Guard</p>
       <h1>Real-time slop detector</h1>
     </div>
-    <label class="switch">
-      <input id="paused" type="checkbox" />
-      <span>Pause</span>
-    </label>
+    <button id="pause-toggle" type="button" class="pause-toggle">Pause</button>
   </header>
+
+  <p id="x-script-status" class="x-live" hidden></p>
 
   <p id="key-warning" class="banner" hidden>No API key yet. Posts stay clean until you save one.</p>
 
@@ -77,7 +77,7 @@ function bind(root: HTMLElement, initial: Settings): void {
   const apiKey = must<HTMLInputElement>(root, '#apiKey');
   const provider = must<HTMLSelectElement>(root, '#provider');
   const model = must<HTMLSelectElement>(root, '#model');
-  const paused = must<HTMLInputElement>(root, '#paused');
+  const pauseToggle = must<HTMLButtonElement>(root, '#pause-toggle');
   const stampEnabled = must<HTMLInputElement>(root, '#stampEnabled');
   const showNotSlop = must<HTMLInputElement>(root, '#showNotSlop');
   const threshold = must<HTMLInputElement>(root, '#threshold');
@@ -86,10 +86,18 @@ function bind(root: HTMLElement, initial: Settings): void {
   const status = must(root, '#status');
   const sample = must<HTMLTextAreaElement>(root, '#sample');
   const sampleHandle = must<HTMLInputElement>(root, '#sample-handle');
-  const sampleOut = must(root, '#sample-out');
+  const sampleOut = must<HTMLPreElement>(root, '#sample-out');
+  const xStatusEl = must(root, '#x-script-status');
 
   const apiKeyLabel = must(root, '#apiKey-label');
   const apiKeyHint = must(root, '#apiKey-hint');
+
+  let paused = initial.paused;
+
+  const paintPause = (): void => {
+    pauseToggle.dataset.paused = paused ? 'true' : 'false';
+    pauseToggle.textContent = paused ? 'Start' : 'Pause';
+  };
 
   const syncKeyCopy = (prov: Settings['provider']): void => {
     if (prov === 'openrouter') {
@@ -109,7 +117,8 @@ function bind(root: HTMLElement, initial: Settings): void {
     apiKey.value = s.apiKey;
     provider.value = s.provider;
     model.value = s.model;
-    paused.checked = s.paused;
+    paused = s.paused;
+    paintPause();
     stampEnabled.checked = s.stampEnabled;
     showNotSlop.checked = s.showNotSlop;
     threshold.value = String(s.threshold);
@@ -132,7 +141,7 @@ function bind(root: HTMLElement, initial: Settings): void {
     ...DEFAULT_SETTINGS,
     apiKey: apiKey.value.trim(),
     provider: provider.value === 'openrouter' ? 'openrouter' : 'typesafe',
-    paused: paused.checked,
+    paused,
     stampEnabled: stampEnabled.checked,
     showNotSlop: showNotSlop.checked,
     threshold: Number(threshold.value),
@@ -146,9 +155,11 @@ function bind(root: HTMLElement, initial: Settings): void {
     });
   });
 
-  paused.addEventListener('change', () => {
+  pauseToggle.addEventListener('click', () => {
+    paused = !paused;
+    paintPause();
     void saveSettings(read()).then(() => {
-      status.textContent = paused.checked ? 'Paused.' : 'Running.';
+      status.textContent = paused ? 'Paused.' : 'Running.';
     });
   });
 
@@ -169,22 +180,23 @@ function bind(root: HTMLElement, initial: Settings): void {
     }
     sampleOut.hidden = false;
     sampleOut.textContent = 'Calling Jev…';
-    void browser.runtime
-      .sendMessage({
-        type: 'JUDGE_TWEET',
-        tweet: {
-          id: `sample-${hash(text)}`,
-          text,
-          handle: sampleHandle.value.trim(),
-        },
-      })
-      .then((result: JudgeResult) => {
+    void sendRuntimeMessage<JudgeResult>({
+      type: 'JUDGE_TWEET',
+      tweet: {
+        id: `sample-${hash(text)}`,
+        text,
+        handle: sampleHandle.value.trim(),
+      },
+    })
+      .then((result) => {
         sampleOut.textContent = JSON.stringify(result, null, 2);
       })
       .catch((err: unknown) => {
         sampleOut.textContent = err instanceof Error ? err.message : 'Message failed';
       });
   });
+
+  void refreshXStatus(xStatusEl);
 }
 
 function must<T extends HTMLElement = HTMLElement>(root: HTMLElement, sel: string): T {
@@ -197,4 +209,58 @@ function hash(text: string): string {
   let h = 0;
   for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) | 0;
   return String(Math.abs(h));
+}
+
+function paintXStatus(
+  el: HTMLElement,
+  state: 'live' | 'missing' | 'idle',
+  text: string,
+): void {
+  el.hidden = false;
+  el.dataset.state = state;
+  el.textContent = text;
+}
+
+async function refreshXStatus(el: HTMLElement): Promise<void> {
+  let tabs: Array<{ id?: number; url?: string }>;
+  try {
+    tabs = await chromeApi().tabs.query({ active: true, currentWindow: true });
+  } catch {
+    return;
+  }
+  const [tab] = tabs;
+  if (!tab?.id || !isXUrl(tab.url)) {
+    paintXStatus(el, 'idle', 'Open x.com to attach the timeline script.');
+    return;
+  }
+
+  const tabId = tab.id;
+  const ping = async (): Promise<XStatusResult | null> => {
+    try {
+      const result = await sendTabMessage<XStatusResult>(tabId, { type: 'X_STATUS' });
+      return result?.ok && result.live ? result : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let status = await ping();
+  if (!status) {
+    try {
+      await sendRuntimeMessage<InjectXResult>({ type: 'INJECT_X', tabId });
+    } catch {
+      // inject message failed; ping once more anyway
+    }
+    status = await ping();
+  }
+
+  if (status) {
+    paintXStatus(el, 'live', `X script live · ${status.cards} cards · ${status.ready} ready`);
+    return;
+  }
+  paintXStatus(
+    el,
+    'missing',
+    'X script missing — Reload the extension, then reload x.com.',
+  );
 }

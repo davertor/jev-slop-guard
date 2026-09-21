@@ -20,7 +20,36 @@ export type PingMessage = {
   type: 'PING';
 };
 
-export type ExtensionMessage = JudgeTweetMessage | GetSettingsMessage | PingMessage;
+export type XStatusMessage = {
+  type: 'X_STATUS';
+};
+
+export type InjectXMessage = {
+  type: 'INJECT_X';
+  tabId: number;
+};
+
+export type ExtensionMessage =
+  | JudgeTweetMessage
+  | GetSettingsMessage
+  | PingMessage
+  | XStatusMessage
+  | InjectXMessage;
+
+export type XStatusResult = {
+  ok: true;
+  live: true;
+  cards: number;
+  ready: number;
+};
+
+export type InjectXResult = { ok: true } | { ok: false; error: string };
+
+export function isInjectXMessage(value: unknown): value is InjectXMessage {
+  if (!value || typeof value !== 'object') return false;
+  const msg = value as InjectXMessage;
+  return msg.type === 'INJECT_X' && typeof msg.tabId === 'number';
+}
 
 export type JudgeOk = { ok: true; verdict: Verdict };
 export type JudgeErr = {

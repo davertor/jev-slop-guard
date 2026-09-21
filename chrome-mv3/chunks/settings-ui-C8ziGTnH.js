@@ -1,4 +1,4 @@
-import { i as browser, n as loadSettings, r as saveSettings, t as DEFAULT_SETTINGS } from "./settings-Bx26lDkM.js";
+import { a as chromeApi, c as sendTabMessage, n as loadSettings, o as isXUrl, r as saveSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-DB1zihqq.js";
 //#region lib/settings-ui.ts
 var SETTINGS_FORM_HTML = `
   <header>
@@ -6,11 +6,10 @@ var SETTINGS_FORM_HTML = `
       <p class="eyebrow">Slop Guard</p>
       <h1>Real-time slop detector</h1>
     </div>
-    <label class="switch">
-      <input id="paused" type="checkbox" />
-      <span>Pause</span>
-    </label>
+    <button id="pause-toggle" type="button" class="pause-toggle">Pause</button>
   </header>
+
+  <p id="x-script-status" class="x-live" hidden></p>
 
   <p id="key-warning" class="banner" hidden>No API key yet. Posts stay clean until you save one.</p>
 
@@ -73,7 +72,7 @@ function bind(root, initial) {
 	const apiKey = must(root, "#apiKey");
 	const provider = must(root, "#provider");
 	const model = must(root, "#model");
-	const paused = must(root, "#paused");
+	const pauseToggle = must(root, "#pause-toggle");
 	const stampEnabled = must(root, "#stampEnabled");
 	const showNotSlop = must(root, "#showNotSlop");
 	const threshold = must(root, "#threshold");
@@ -83,8 +82,14 @@ function bind(root, initial) {
 	const sample = must(root, "#sample");
 	const sampleHandle = must(root, "#sample-handle");
 	const sampleOut = must(root, "#sample-out");
+	const xStatusEl = must(root, "#x-script-status");
 	const apiKeyLabel = must(root, "#apiKey-label");
 	const apiKeyHint = must(root, "#apiKey-hint");
+	let paused = initial.paused;
+	const paintPause = () => {
+		pauseToggle.dataset.paused = paused ? "true" : "false";
+		pauseToggle.textContent = paused ? "Start" : "Pause";
+	};
 	const syncKeyCopy = (prov) => {
 		if (prov === "openrouter") {
 			apiKeyLabel.textContent = "OpenRouter API key (BYOK → chrome.storage.local)";
@@ -100,7 +105,8 @@ function bind(root, initial) {
 		apiKey.value = s.apiKey;
 		provider.value = s.provider;
 		model.value = s.model;
-		paused.checked = s.paused;
+		paused = s.paused;
+		paintPause();
 		stampEnabled.checked = s.stampEnabled;
 		showNotSlop.checked = s.showNotSlop;
 		threshold.value = String(s.threshold);
@@ -119,7 +125,7 @@ function bind(root, initial) {
 		...DEFAULT_SETTINGS,
 		apiKey: apiKey.value.trim(),
 		provider: provider.value === "openrouter" ? "openrouter" : "typesafe",
-		paused: paused.checked,
+		paused,
 		stampEnabled: stampEnabled.checked,
 		showNotSlop: showNotSlop.checked,
 		threshold: Number(threshold.value),
@@ -131,9 +137,11 @@ function bind(root, initial) {
 			status.textContent = "Saved.";
 		});
 	});
-	paused.addEventListener("change", () => {
+	pauseToggle.addEventListener("click", () => {
+		paused = !paused;
+		paintPause();
 		saveSettings(read()).then(() => {
-			status.textContent = paused.checked ? "Paused." : "Running.";
+			status.textContent = paused ? "Paused." : "Running.";
 		});
 	});
 	stampEnabled.addEventListener("change", () => {
@@ -151,7 +159,7 @@ function bind(root, initial) {
 		}
 		sampleOut.hidden = false;
 		sampleOut.textContent = "Calling Jev…";
-		browser.runtime.sendMessage({
+		sendRuntimeMessage({
 			type: "JUDGE_TWEET",
 			tweet: {
 				id: `sample-${hash(text)}`,
@@ -164,6 +172,7 @@ function bind(root, initial) {
 			sampleOut.textContent = err instanceof Error ? err.message : "Message failed";
 		});
 	});
+	refreshXStatus(xStatusEl);
 }
 function must(root, sel) {
 	const node = root.querySelector(sel);
@@ -174,6 +183,51 @@ function hash(text) {
 	let h = 0;
 	for (let i = 0; i < text.length; i += 1) h = h * 31 + text.charCodeAt(i) | 0;
 	return String(Math.abs(h));
+}
+function paintXStatus(el, state, text) {
+	el.hidden = false;
+	el.dataset.state = state;
+	el.textContent = text;
+}
+async function refreshXStatus(el) {
+	let tabs;
+	try {
+		tabs = await chromeApi().tabs.query({
+			active: true,
+			currentWindow: true
+		});
+	} catch {
+		return;
+	}
+	const [tab] = tabs;
+	if (!tab?.id || !isXUrl(tab.url)) {
+		paintXStatus(el, "idle", "Open x.com to attach the timeline script.");
+		return;
+	}
+	const tabId = tab.id;
+	const ping = async () => {
+		try {
+			const result = await sendTabMessage(tabId, { type: "X_STATUS" });
+			return result?.ok && result.live ? result : null;
+		} catch {
+			return null;
+		}
+	};
+	let status = await ping();
+	if (!status) {
+		try {
+			await sendRuntimeMessage({
+				type: "INJECT_X",
+				tabId
+			});
+		} catch {}
+		status = await ping();
+	}
+	if (status) {
+		paintXStatus(el, "live", `X script live · ${status.cards} cards · ${status.ready} ready`);
+		return;
+	}
+	paintXStatus(el, "missing", "X script missing — Reload the extension, then reload x.com.");
 }
 //#endregion
 export { mountSettingsPage as t };

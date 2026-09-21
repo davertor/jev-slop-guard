@@ -34,7 +34,7 @@ Stored only in `chrome.storage.local` (BYOK, never committed).
 
 | Control | Default | Effect |
 | --- | --- | --- |
-| Pause | off | Stop new classifications |
+| Pause / Start | running | Amber **Pause** stops new classifications; green **Start** resumes. Same `settings.paused` boolean. |
 | API key | empty | TypeSafe Jev key |
 | Slop threshold | 70% | `slop` probability at or above this → red **Stop \| NN%**, blur, stamp |
 | Blur + SLOP stamp | on | Turn off to keep badges without covering the post |
@@ -52,6 +52,8 @@ Below threshold (or `not_slop`): green **Not slop \| NN%** + check. The post is 
 - Never blocks scroll; latency is visible on purpose (clean post → then badge)
 - Skips Promoted / `placementTracking` ads
 - Optional corner chip shows the resolved model (`Jev-latest`)
+- Home timeline probe chip (inline styles, next to Para ti / Siguiendo): `X script live · N cards · M ready`
+- Background service worker injects the X content script into matching tabs (not manifest-only)
 - X / Twitter only
 
 ## Fixture playground

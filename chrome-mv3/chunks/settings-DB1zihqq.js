@@ -29,6 +29,44 @@
 	}
 })();
 //#endregion
+//#region lib/chrome-msg.ts
+function chromeApi() {
+	const root = globalThis;
+	const api = root.chrome?.runtime ? root.chrome : root.browser;
+	if (!api?.runtime) throw new Error("chrome extension API unavailable");
+	return api;
+}
+function isXUrl(url) {
+	if (!url) return false;
+	try {
+		const { protocol, hostname } = new URL(url);
+		if (protocol !== "https:") return false;
+		return hostname === "x.com" || hostname === "www.x.com" || hostname === "twitter.com" || hostname === "www.twitter.com";
+	} catch {
+		return false;
+	}
+}
+function sendRuntimeMessage(message) {
+	return new Promise((resolve, reject) => {
+		const api = chromeApi();
+		api.runtime.sendMessage(message, (response) => {
+			const err = api.runtime.lastError;
+			if (err) reject(new Error(err.message));
+			else resolve(response);
+		});
+	});
+}
+function sendTabMessage(tabId, message) {
+	return new Promise((resolve, reject) => {
+		const api = chromeApi();
+		api.tabs.sendMessage(tabId, message, (response) => {
+			const err = api.runtime.lastError;
+			if (err) reject(new Error(err.message));
+			else resolve(response);
+		});
+	});
+}
+//#endregion
 //#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
 /**
 * Contains the `browser` export which you should use to access the extension
@@ -78,4 +116,4 @@ async function saveSettings(next) {
 	await browser.storage.local.set({ [SETTINGS_KEY]: mergeSettings(next) });
 }
 //#endregion
-export { browser as i, loadSettings as n, saveSettings as r, DEFAULT_SETTINGS as t };
+export { chromeApi as a, sendTabMessage as c, browser as i, loadSettings as n, isXUrl as o, saveSettings as r, sendRuntimeMessage as s, DEFAULT_SETTINGS as t };

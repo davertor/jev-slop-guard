@@ -1,4 +1,5 @@
 import { applyVerdict, clearStamp, markError, markPending, reapplyFromDataset } from './badge';
+import { chromeApi, sendRuntimeMessage } from './chrome-msg';
 import type { JudgeResult } from './messages';
 import { debounce } from './queue';
 import { DEFAULT_SETTINGS, loadSettings, SETTINGS_KEY, type Settings } from './settings';
@@ -64,7 +65,7 @@ export function runTimelineGuard(
 
     putBack(id: string, article: HTMLElement): void {
       undoneIds.add(id);
-      void browser.storage.session.set({ [adapter.undoKey]: [...undoneIds] });
+      void chromeApi().storage.session.set({ [adapter.undoKey]: [...undoneIds] });
       clearStamp(article);
     },
 
@@ -80,10 +81,10 @@ export function runTimelineGuard(
       markPending(article);
 
       try {
-        const result = (await browser.runtime.sendMessage({
+        const result = await sendRuntimeMessage<JudgeResult | undefined>({
           type: 'JUDGE_TWEET',
           tweet: { id: item.id, text: item.text, handle: item.handle },
-        })) as JudgeResult | undefined;
+        });
 
         if (ctx.isInvalid) return;
 
@@ -173,7 +174,7 @@ export function runTimelineGuard(
       if (
         target instanceof Element &&
         target.closest?.(
-          '.slop-guard-row, .slop-guard-overlay, .slop-guard-modelbar, .slop-guard-banner, .slop-guard-liprobe',
+          '.slop-guard-row, .slop-guard-overlay, .slop-guard-modelbar, .slop-guard-banner, .slop-guard-liprobe, .slop-guard-xprobe',
         )
       ) {
         continue;
@@ -197,7 +198,7 @@ export function runTimelineGuard(
     slopFeed.scan();
   });
 
-  browser.storage.onChanged.addListener((changes, area) => {
+  chromeApi().storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes[SETTINGS_KEY]) return;
     void loadSettings().then((loaded) => {
       settings = loaded;
@@ -219,8 +220,8 @@ export function runTimelineGuard(
 }
 
 async function loadUndoneIds(key: string): Promise<string[]> {
-  const bag = await browser.storage.session.get(key);
-  return Array.isArray(bag[key]) ? bag[key].filter((id): id is string => typeof id === 'string') : [];
+  const bag = await chromeApi().storage.session.get(key);
+  return Array.isArray(bag[key]) ? bag[key].filter((id: unknown): id is string => typeof id === 'string') : [];
 }
 
 function isInViewport(el: Element): boolean {
