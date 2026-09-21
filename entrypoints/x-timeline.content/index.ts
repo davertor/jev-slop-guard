@@ -36,7 +36,7 @@ function xStatus(): XStatusResult {
     if (info.ok) ready += 1;
     else {
       missCounts.set(info.reason, (missCounts.get(info.reason) ?? 0) + 1);
-      console.debug('[slop-guard] extract', info.reason, card);
+      console.debug('[jev-slop-guard] extract', info.reason, card);
     }
   }
   return {

@@ -24,7 +24,7 @@ export default defineContentScript({
       extract: extractLinkedInPost,
       undoKey: 'slopGuard.undone.linkedin.v1',
       missingKeyMessage:
-        'Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup.',
+        'Jev Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup.',
     });
   },
 });
@@ -46,5 +46,5 @@ function showLiProbe(): void {
       'position:fixed;left:12px;bottom:40px;z-index:2147483646;padding:6px 10px;border-radius:999px;background:#553011;color:#fff;font:12px/1.3 system-ui,sans-serif;pointer-events:none;';
     document.body.append(bar);
   }
-  bar.textContent = `Slop Guard LI · cards ${cards} · ready ${ready}`;
+  bar.textContent = `Jev Slop Guard LI · cards ${cards} · ready ${ready}`;
 }
