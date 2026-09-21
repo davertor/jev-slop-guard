@@ -61,6 +61,17 @@ export function chromeApi(): ChromeLike {
   return api;
 }
 
+export function isLinkedInUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== 'https:') return false;
+    return hostname === 'linkedin.com' || hostname === 'www.linkedin.com';
+  } catch {
+    return false;
+  }
+}
+
 export function isXUrl(url: string | undefined | null): boolean {
   if (!url) return false;
   try {

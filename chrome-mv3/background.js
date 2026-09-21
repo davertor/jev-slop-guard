@@ -726,6 +726,16 @@ var background = (function() {
 		if (!api?.runtime) throw new Error("chrome extension API unavailable");
 		return api;
 	}
+	function isLinkedInUrl(url) {
+		if (!url) return false;
+		try {
+			const { protocol, hostname } = new URL(url);
+			if (protocol !== "https:") return false;
+			return hostname === "linkedin.com" || hostname === "www.linkedin.com";
+		} catch {
+			return false;
+		}
+	}
 	function isXUrl(url) {
 		if (!url) return false;
 		try {
@@ -752,6 +762,11 @@ var background = (function() {
 		if (!value || typeof value !== "object") return false;
 		const msg = value;
 		return msg.type === "INJECT_X" && typeof msg.tabId === "number";
+	}
+	function isInjectLiMessage(value) {
+		if (!value || typeof value !== "object") return false;
+		const msg = value;
+		return msg.type === "INJECT_LI" && typeof msg.tabId === "number";
 	}
 	function isJudgeTweetMessage(value) {
 		if (!value || typeof value !== "object") return false;
@@ -831,6 +846,66 @@ var background = (function() {
 		return mergeSettings((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
 	}
 	//#endregion
+	//#region lib/li-inject.ts
+	var LI_JS = "content-scripts/linkedin-feed.js";
+	var LI_CSS = "content-scripts/linkedin-feed.css";
+	var LI_QUERY = ["https://www.linkedin.com/*", "https://linkedin.com/*"];
+	async function pingLiStatus(tabId) {
+		try {
+			const result = await sendTabMessage(tabId, { type: "LI_STATUS" });
+			return result?.ok && result.live ? result : null;
+		} catch {
+			return null;
+		}
+	}
+	async function injectLinkedInFeed(tabId) {
+		const api = chromeApi();
+		try {
+			await api.scripting.insertCSS({
+				target: { tabId },
+				files: [LI_CSS]
+			});
+		} catch {}
+		await api.scripting.executeScript({
+			target: { tabId },
+			files: [LI_JS]
+		});
+	}
+	async function ensureLinkedInFeed(tabId) {
+		const existing = await pingLiStatus(tabId);
+		if (existing) return existing;
+		try {
+			await injectLinkedInFeed(tabId);
+		} catch (err) {
+			return {
+				ok: false,
+				error: err instanceof Error ? err.message : String(err)
+			};
+		}
+		return await pingLiStatus(tabId) ?? {
+			ok: false,
+			error: "Injected, but LinkedIn script did not answer."
+		};
+	}
+	async function injectAllLinkedInTabs() {
+		const tabs = await chromeApi().tabs.query({ url: LI_QUERY });
+		for (const tab of tabs) if (typeof tab.id === "number" && isLinkedInUrl(tab.url)) ensureLinkedInFeed(tab.id);
+	}
+	function watchLinkedInTabs() {
+		const api = chromeApi();
+		api.tabs.onUpdated.addListener((tabId, info, tab) => {
+			if (info.status !== "complete") return;
+			if (!isLinkedInUrl(tab.url)) return;
+			ensureLinkedInFeed(tabId);
+		});
+		api.runtime.onInstalled.addListener(() => {
+			injectAllLinkedInTabs();
+		});
+		api.runtime.onStartup.addListener(() => {
+			injectAllLinkedInTabs();
+		});
+	}
+	//#endregion
 	//#region lib/x-inject.ts
 	var X_JS = "content-scripts/x-timeline.js";
 	var X_CSS = "content-scripts/x-timeline.css";
@@ -906,6 +981,7 @@ var background = (function() {
 	var background_default = defineBackground(() => {
 		hydrateCache();
 		watchXTabs();
+		watchLinkedInTabs();
 		chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			const msg = message;
 			if (msg.type === "PING") {
@@ -936,6 +1012,20 @@ var background = (function() {
 			}
 			if (isInjectXMessage(msg)) {
 				ensureXTimeline(msg.tabId).then((result) => {
+					sendResponse(result.ok ? { ok: true } : {
+						ok: false,
+						error: result.error
+					});
+				}).catch((err) => {
+					sendResponse({
+						ok: false,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				});
+				return true;
+			}
+			if (isInjectLiMessage(msg)) {
+				ensureLinkedInFeed(msg.tabId).then((result) => {
 					sendResponse(result.ok ? { ok: true } : {
 						ok: false,
 						error: result.error

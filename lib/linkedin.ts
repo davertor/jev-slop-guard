@@ -28,6 +28,8 @@ const FEED_ROW_SELECTORS = [
 const TEXT_SELECTORS = [
   '.update-components-text',
   '.feed-shared-update-v2__commentary',
+  '.feed-shared-update-v2__description',
+  '.feed-shared-text',
   '.feed-shared-inline-show-more-text',
   '.update-components-update-v2__commentary',
   '[data-test-id="main-feed-activity-card__commentary"]',
@@ -49,8 +51,11 @@ export function listLinkedInArticles(root: ParentNode = document): HTMLElement[]
   const outer = dropNested(cards);
   // Drop absurdly large wrappers (whole feed) — keep post-sized nodes.
   return outer.filter((el) => {
-    const h = el.getBoundingClientRect().height;
-    return h > 80 && h < window.innerHeight * 2.5;
+    const rectH = el.getBoundingClientRect().height;
+    const h = rectH > 0 ? rectH : (el as HTMLElement).offsetHeight || 0;
+    // height 0 (tests / not laid out yet): keep; otherwise post-sized only
+    if (h === 0) return true;
+    return h > 80 && h < Math.max(window.innerHeight, 600) * 2.5;
   });
 }
 

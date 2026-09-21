@@ -1,6 +1,7 @@
 import { callJev } from '../lib/jev';
 import { chromeApi } from '../lib/chrome-msg';
 import {
+  isInjectLiMessage,
   isInjectXMessage,
   isJudgeTweetMessage,
   type ExtensionMessage,
@@ -11,6 +12,7 @@ import {
 import { createLimiter } from '../lib/queue';
 import { loadSettings } from '../lib/settings';
 import type { Verdict } from '../lib/verdict';
+import { ensureLinkedInFeed, watchLinkedInTabs } from '../lib/li-inject';
 import { ensureXTimeline, watchXTabs } from '../lib/x-inject';
 
 const CACHE_KEY = 'slopGuard.cache.v2';
@@ -22,6 +24,7 @@ const inflight = new Map<string, Promise<JudgeResult>>();
 export default defineBackground(() => {
   void hydrateCache();
   watchXTabs();
+  watchLinkedInTabs();
 
   chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const msg = message as ExtensionMessage;
@@ -49,6 +52,20 @@ export default defineBackground(() => {
     }
     if (isInjectXMessage(msg)) {
       ensureXTimeline(msg.tabId)
+        .then((result) => {
+          const reply: InjectXResult = result.ok ? { ok: true } : { ok: false, error: result.error };
+          sendResponse(reply);
+        })
+        .catch((err: unknown) => {
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          } satisfies InjectXResult);
+        });
+      return true;
+    }
+    if (isInjectLiMessage(msg)) {
+      ensureLinkedInFeed(msg.tabId)
         .then((result) => {
           const reply: InjectXResult = result.ok ? { ok: true } : { ok: false, error: result.error };
           sendResponse(reply);

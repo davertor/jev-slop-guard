@@ -1,4 +1,4 @@
-import { i as browser, n as loadSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-Ct9jgRFA.js";
+import { c as sendRuntimeMessage, i as browser, n as loadSettings, t as DEFAULT_SETTINGS } from "./settings-DRS-MZ5q.js";
 //#region lib/tweet.ts
 var STATUS_RE = /\/status\/(\d+)/;
 var REPOST_RE = /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwitte[oó]|ha\s+retwitteado|ha\s+reposteado|retuite[oó]/i;
