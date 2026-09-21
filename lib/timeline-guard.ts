@@ -29,6 +29,7 @@ export function runTimelineGuard(
   const undoneIds = new Set<string>();
   const observedArticles = new WeakSet<HTMLElement>();
   const inFlightArticles = new WeakSet<HTMLElement>();
+  const intersectingArticles = new WeakSet<HTMLElement>();
 
   const slopFeed = {
     reset(article: HTMLElement): void {
@@ -57,9 +58,8 @@ export function runTimelineGuard(
       }
       if (state === 'pending') {
         const started = Number(article.dataset.slopPendingAt ?? 0);
-        if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) {
-          slopFeed.reset(article);
-        }
+        const stale = !started || Date.now() - started > PENDING_MS;
+        if (stale && !inFlightArticles.has(article)) slopFeed.reset(article);
         return;
       }
       if (state === 'done' && !ownSlopRow(article)) {
@@ -156,7 +156,7 @@ export function runTimelineGuard(
           observedArticles.add(article);
           intersectionObserver.observe(article);
         }
-        if (slopFeed.shouldJudge(article) && isInViewport(article)) {
+        if (slopFeed.shouldJudge(article) && (isInViewport(article) || intersectingArticles.has(article))) {
           void slopFeed.judge(article);
         }
       }
@@ -168,11 +168,14 @@ export function runTimelineGuard(
   const intersectionObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting || !(entry.target instanceof HTMLElement)) continue;
-        void slopFeed.judge(entry.target);
+        if (!(entry.target instanceof HTMLElement)) continue;
+        if (entry.isIntersecting) intersectingArticles.add(entry.target);
+        else intersectingArticles.delete(entry.target);
+        if (entry.isIntersecting) void slopFeed.judge(entry.target);
       }
     },
-    { root: null, threshold: 0.05, rootMargin: '220px 0px' },
+    // threshold 0: tall media cards rarely expose 5% of their box in the viewport
+    { root: null, threshold: 0, rootMargin: '400px 0px' },
   );
 
   const mutationObserver = new MutationObserver((mutations) => {
@@ -232,8 +235,16 @@ async function loadUndoneIds(key: string): Promise<string[]> {
 }
 
 function isInViewport(el: Element): boolean {
-  const rect = el.getBoundingClientRect();
-  return rect.bottom > 0 && rect.top < window.innerHeight + 220;
+  const nodes: Element[] = [el];
+  const cell = el.closest('[data-testid="cellInnerDiv"]');
+  if (cell && cell !== el) nodes.push(cell);
+  const limit = window.innerHeight + 400;
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (rect.bottom > 0 && rect.top < limit) return true;
+  }
+  return false;
 }
 
 function showModelBar(model: string): void {

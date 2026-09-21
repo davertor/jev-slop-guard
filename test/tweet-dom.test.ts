@@ -197,6 +197,121 @@ test('React wipe: done card without a row gets the badge put back', () => {
   assert.match(row.textContent ?? '', /Slop \| 2%/);
 });
 
+test('media card with lang text and Show more, no tweetText', () => {
+  const root = mount(`
+    <article data-testid="tweet" id="gemma">
+      <div data-testid="User-Name"><a href="/googlegemma">@googlegemma</a></div>
+      <a href="/googlegemma/status/99"><time>19 sept.</time></a>
+      <div>
+        <div lang="en" dir="auto">DiffusionGemma as Jev showcases the power of non-autoregressive architectures.</div>
+        <div data-testid="tweet-text-show-more-link" role="button">Mostrar más</div>
+      </div>
+      <div data-testid="videoPlayer"><span>GIF</span></div>
+      <div role="group"><div data-testid="like">5</div></div>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.ok(item);
+  assert.equal(item.id, '99');
+  assert.match(item.text, /DiffusionGemma as Jev/);
+  assert.equal(item.text.includes('Mostrar más'), false);
+});
+
+test('odd empty tweetText falls back to lang sibling', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/atomic_chat_hq">@atomic_chat_hq</a></div>
+      <a href="/atomic_chat_hq/status/77"><time>12 jun.</time></a>
+      <div data-testid="tweetText">Mostrar más</div>
+      <div lang="en">Diffusion Gemma is 4x faster, but makes 6x more mistakes on the same three tasks.</div>
+      <div data-testid="card.wrapper"><span>Promoted</span></div>
+    </article>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.ok(item);
+  assert.equal(item.id, '77');
+  assert.match(item.text, /4x faster/);
+  assert.equal(item.text.includes('Mostrar más'), false);
+});
+
+test('Promoted inside a media card does not skip an organic tweet', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/ada">@ada</a></div>
+      <a href="/ada/status/12"><time>1h</time></a>
+      <div data-testid="tweetText">organic post with a screenshot card that mentions ads</div>
+      <div data-testid="card.wrapper"><span>Promoted</span></div>
+    </article>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.ok(item);
+  assert.equal(item.id, '12');
+});
+
+test('nested body wrapper: time on outer, text on inner tweet shell', () => {
+  const root = mount(`
+    <article data-testid="tweet" id="outer">
+      <div data-testid="User-Name"><a href="/googlegemma">@googlegemma</a></div>
+      <a href="/googlegemma/status/55"><time>19 sept.</time></a>
+      <div data-testid="tweet" id="inner">
+        <div data-testid="tweetText">Canvas diffusion evaluates structured choices in a single parallel pass.</div>
+        <div data-testid="tweetPhoto"><a href="/googlegemma/status/55/photo/1">img</a></div>
+      </div>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.ok(cards.length >= 1);
+  const extracted = cards.map((card) => extractTweet(card)).filter(Boolean);
+  assert.ok(extracted.length >= 1);
+  assert.equal(extracted[0]?.id, '55');
+  assert.match(extracted[0]?.text ?? '', /Canvas diffusion/);
+});
+
+test('photo status link is enough when time has no href', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/maya">@maya</a></div>
+      <time>3h</time>
+      <div data-testid="tweetText">a media tweet whose timestamp is not wrapped in a status link</div>
+      <div data-testid="tweetPhoto"><a href="/maya/status/314/photo/1">img</a></div>
+    </article>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.ok(item);
+  assert.equal(item.id, '314');
+});
+
+test('cell without tweet testid still extracts lang + status link', () => {
+  const root = mount(`
+    <div data-testid="cellInnerDiv">
+      <div data-testid="User-Name"><a href="/bob">@bob</a></div>
+      <a href="/bob/status/88"><time>2h</time></a>
+      <div lang="en">reposted body that is long enough to extract from a lang node</div>
+    </div>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.ok(item);
+  assert.equal(item.id, '88');
+  assert.match(item.text, /reposted body/);
+});
+
+test('usable text without status links still extracts via hashed id', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/ada">@ada</a></div>
+      <div lang="en">hashed fallback id so this visible card is still judged</div>
+    </article>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.ok(item);
+  assert.match(item.id, /^x-t-/);
+  assert.match(item.text, /hashed fallback/);
+});
+
 test('under-threshold pill is Slop | slopP, not notP', () => {
   const root = mount(tweetCard(SAMU));
   const card = listTweetArticles(root)[0]!;

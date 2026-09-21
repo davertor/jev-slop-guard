@@ -130,10 +130,17 @@
 	}
 	//#endregion
 	//#region lib/tweet.ts
+	var CHROME_SEL = "[data-testid=\"User-Name\"], [data-testid=\"socialContext\"], [role=\"group\"], [data-testid=\"card.wrapper\"], [data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], time";
 	/** Own tweetText first; retweet shells fall back to the nested original. */
 	function findTweetTextEl(article) {
 		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article)) return node;
 		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) return node;
+		for (const node of queryDeep(article, "[lang]")) {
+			if (!belongsToArticle(node, article) || isChrome(node)) continue;
+			if (nodeText(node).length >= 8) return node;
+		}
+		const more = queryDeep(article, "[data-testid=\"tweet-text-show-more-link\"]")[0];
+		if (more?.previousElementSibling instanceof HTMLElement) return more.previousElementSibling;
 		return null;
 	}
 	function findActionBar(article) {
@@ -155,6 +162,18 @@
 	function tweetCardOwner(node) {
 		const owner = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
 		return owner instanceof HTMLElement ? owner : null;
+	}
+	function isChrome(node) {
+		return Boolean(node.closest(CHROME_SEL));
+	}
+	function nodeText(node) {
+		const light = usableText(node.textContent ?? "");
+		if (light.length >= 8) return light;
+		const shadow = usableText(node.shadowRoot?.textContent ?? "");
+		return shadow.length > light.length ? shadow : light;
+	}
+	function usableText(raw) {
+		return raw.replace(/\b(Mostrar más|Show more|Show More)\b/gi, "").replace(/\s+/g, " ").trim();
 	}
 	/** querySelectorAll plus shadow roots (X sometimes wraps cells). */
 	function queryDeep(root, selector) {
@@ -401,6 +420,7 @@
 		const undoneIds = /* @__PURE__ */ new Set();
 		const observedArticles = /* @__PURE__ */ new WeakSet();
 		const inFlightArticles = /* @__PURE__ */ new WeakSet();
+		const intersectingArticles = /* @__PURE__ */ new WeakSet();
 		const slopFeed = {
 			reset(article) {
 				article.removeAttribute("data-slop-guard");
@@ -426,7 +446,7 @@
 				}
 				if (state === "pending") {
 					const started = Number(article.dataset.slopPendingAt ?? 0);
-					if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) slopFeed.reset(article);
+					if ((!started || Date.now() - started > PENDING_MS) && !inFlightArticles.has(article)) slopFeed.reset(article);
 					return;
 				}
 				if (state === "done" && !ownSlopRow(article)) reapplyFromDataset(article, settings, {
@@ -511,20 +531,22 @@
 						observedArticles.add(article);
 						intersectionObserver.observe(article);
 					}
-					if (slopFeed.shouldJudge(article) && isInViewport(article)) slopFeed.judge(article);
+					if (slopFeed.shouldJudge(article) && (isInViewport(article) || intersectingArticles.has(article))) slopFeed.judge(article);
 				}
 			}
 		};
 		const scheduleScan = debounce(() => slopFeed.scan(), 120);
 		const intersectionObserver = new IntersectionObserver((entries) => {
 			for (const entry of entries) {
-				if (!entry.isIntersecting || !(entry.target instanceof HTMLElement)) continue;
-				slopFeed.judge(entry.target);
+				if (!(entry.target instanceof HTMLElement)) continue;
+				if (entry.isIntersecting) intersectingArticles.add(entry.target);
+				else intersectingArticles.delete(entry.target);
+				if (entry.isIntersecting) slopFeed.judge(entry.target);
 			}
 		}, {
 			root: null,
-			threshold: .05,
-			rootMargin: "220px 0px"
+			threshold: 0,
+			rootMargin: "400px 0px"
 		});
 		const mutationObserver = new MutationObserver((mutations) => {
 			for (const mutation of mutations) {
@@ -574,8 +596,16 @@
 		return Array.isArray(bag[key]) ? bag[key].filter((id) => typeof id === "string") : [];
 	}
 	function isInViewport(el) {
-		const rect = el.getBoundingClientRect();
-		return rect.bottom > 0 && rect.top < window.innerHeight + 220;
+		const nodes = [el];
+		const cell = el.closest("[data-testid=\"cellInnerDiv\"]");
+		if (cell && cell !== el) nodes.push(cell);
+		const limit = window.innerHeight + 400;
+		for (const node of nodes) {
+			const rect = node.getBoundingClientRect();
+			if (rect.width === 0 && rect.height === 0) continue;
+			if (rect.bottom > 0 && rect.top < limit) return true;
+		}
+		return false;
 	}
 	function showModelBar(model) {
 		let bar = document.querySelector(".slop-guard-modelbar");
