@@ -573,7 +573,8 @@ test('screenshot miss-quote-video: nested RT shell + quoted video card', () => {
   assert.ok(parent);
   assertReadyBadge(parent, '10001', /frontier AI/);
   const quoted = cards.find((card) => card.id === 'quoted');
-  if (quoted) assertReadyBadge(quoted, '10011', /Plan IA360/);
+  assert.ok(quoted, 'quoted video card was dropped');
+  assertReadyBadge(quoted, '10011', /Plan IA360/);
 });
 
 test('screenshot miss-monos-video: caption+video extracts and badges outside the player', () => {
