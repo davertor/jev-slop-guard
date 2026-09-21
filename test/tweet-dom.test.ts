@@ -3,7 +3,13 @@ import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
 import { applyVerdict, ownSlopRow, reapplyFromDataset } from '../lib/badge';
 import { DEFAULT_SETTINGS } from '../lib/settings';
-import { extractTweet, isRetweetCard, listTweetArticles } from '../lib/tweet';
+import {
+  extractTweet,
+  findActionBar,
+  findTweetTextEl,
+  isRetweetCard,
+  listTweetArticles,
+} from '../lib/tweet';
 
 const { window, document } = parseHTML('<!DOCTYPE html><html><body></body></html>');
 Object.assign(globalThis, {
@@ -399,4 +405,195 @@ test('quote tweet still lists parent commentary and nested original', () => {
     </article>
   `);
   assert.deepEqual(listedIds(root), ['77', '88']);
+});
+
+function actionBar(): string {
+  return `<div role="group"><div data-testid="reply">1</div><div data-testid="retweet">2</div><div data-testid="like">5</div></div>`;
+}
+
+function videoHusk(label: string, datetime: string, inner = ''): string {
+  return `
+    <div data-testid="videoComponent">
+      <div data-testid="tweet">
+        <div data-testid="videoPlayer">
+          ${inner}
+          <time datetime="${datetime}">${label}</time>
+        </div>
+      </div>
+    </div>`;
+}
+
+function assertReadyBadge(article: HTMLElement, id: string, text: RegExp): void {
+  const item = extractTweet(article);
+  assert.ok(item, 'extractTweet returned null');
+  assert.equal(item.id, id);
+  assert.match(item.text, text);
+  assert.ok(
+    findTweetTextEl(article) || findActionBar(article),
+    'no badge insert target (text el or action bar)',
+  );
+  applyVerdict(article, notSlop(id), DEFAULT_SETTINGS);
+  const row = ownSlopRow(article);
+  assert.ok(row, 'badge row missing after applyVerdict');
+  assert.equal(row.closest('[data-testid="videoPlayer"], [data-testid="videoComponent"]'), null);
+  assert.match(row.textContent ?? '', /Slop \| 2%/);
+}
+
+/**
+ * miss-quote-video.png — "Mihura reposteó" of Vicent Martí quoting Pedro Sánchez.
+ * Real X: outer role=group wraps the whole card; commentary is a lang node (no tweetText);
+ * quoted post is a role=link box, not data-testid=tweet; video sits in a nested tweet husk
+ * with a duration <time>.
+ */
+function fixtureMissQuoteVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/vmg/status/10001" aria-label="View post"></a>
+      <article data-testid="tweet" id="quote-rt">
+        <div role="group" aria-label="Mihura reposteó Vicent Martí This is nothing">
+          <div>
+            <a data-testid="socialContext" href="/Mihura">Mihura</a>
+            <span> reposteó</span>
+          </div>
+          <div data-testid="User-Name">
+            <a href="/vmg"><span>Vicent Martí</span></a>
+            <a href="/vmg">@vmg</a>
+            <a href="/vmg/status/10001"><time datetime="2026-09-21T10:00:00.000Z">1h</time></a>
+          </div>
+          <div lang="en">This is nothing. There's no frontier AI development in this country. The very few Spanish engineers working on frontier AI are working for American companies. It is literally impossible to develop competitive AI in the socialist hellscape that this guy has thrust upon us.</div>
+          <div role="link" tabindex="0">
+            <div data-testid="User-Name">
+              <a href="/sanchezcastejon"><span>Pedro Sánchez</span></a>
+              <a href="/sanchezcastejon">@sanchezcastejon</a>
+              <time>2h</time>
+            </div>
+            <div lang="es">Hoy presentamos el Plan IA360 para un despliegue responsable de la Inteligencia Artificial.</div>
+            ${videoHusk('2:06', 'PT2M6S')}
+          </div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+/**
+ * miss-quote-video.png nesting variant — RT shell around a quote whose nested
+ * [data-testid=tweet] is the quoted original, plus a video husk inside it.
+ */
+function fixtureMissQuoteVideoNestedShell(): string {
+  return `
+    <article data-testid="tweet" id="rt-shell">
+      <div data-testid="socialContext">Mihura reposteó</div>
+      <article data-testid="tweet" id="quote-parent">
+        <div role="group">
+          <div data-testid="User-Name">
+            <a href="/vmg"><span>Vicent Martí</span></a>
+            <a href="/vmg">@vmg</a>
+            <a href="/vmg/status/10001"><time>1h</time></a>
+          </div>
+          <div lang="en">This is nothing. There's no frontier AI development in this country. The very few Spanish engineers working on frontier AI are working for American companies.</div>
+          <article data-testid="tweet" id="quoted">
+            <div data-testid="User-Name">
+              <a href="/sanchezcastejon">@sanchezcastejon</a>
+            </div>
+            <a href="/sanchezcastejon/status/10011"><time>2h</time></a>
+            <div lang="es">Hoy presentamos el Plan IA360 para un despliegue responsable de la Inteligencia Artificial.</div>
+            ${videoHusk('2:06', 'PT2M6S')}
+          </article>
+          ${actionBar()}
+        </div>
+      </article>
+    </article>`;
+}
+
+/**
+ * miss-monos-video.png — @monospodcast short caption + native video.
+ * Real X: outer role=group; caption in div[lang] (no tweetText); duration <time>
+ * and "AI"/"Original" overlays live inside the video husk and must not steal text.
+ */
+function fixtureMissMonosVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/monospodcast/status/10002" aria-label="View post"></a>
+      <article data-testid="tweet" id="monos">
+        <div role="group" aria-label="monos estocásticos La IA está ayudando">
+          <div data-testid="User-Name">
+            <a href="/monospodcast"><span>monos estocásticos</span></a>
+            <a href="/monospodcast">@monospodcast</a>
+          </div>
+          <time>20 sept.</time>
+          <div lang="es">La IA está ayudando a los chavales a integrarse y poder ser uno más, menos mal.</div>
+          ${videoHusk('0:14', 'PT14S', '<div data-testid="tweetText">Original</div><span>AI</span>')}
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+/**
+ * hit-image-mostrar-mas.png — @root_rat text + flowchart image + "Mostrar más".
+ * Control: already badges on 0.1.13; must keep working inside X's outer role=group.
+ */
+function fixtureHitMostrarMas(): string {
+  return `
+    <article data-testid="tweet" id="root-rat">
+      <div role="group" aria-label="Pablo R. Toca desempolvar esto">
+        <div data-testid="User-Name">
+          <a href="/root_rat"><span>Pablo R. (Root Rat)</span></a>
+          <a href="/root_rat">@root_rat</a>
+          <a href="/root_rat/status/10003"><time>20 sept.</time></a>
+        </div>
+        <div>
+          <div lang="es">Toca desempolvar esto... es lo malo de la velocidad warp que lleva la IA.. proyectos muy prometedores que tenía se van relegando. Pero lo de Jev me ha hecho darle una pensada y recuperar cosas que tenía muy avanzadas hace un año desde otra perspectiva y para un caso de uso muy</div>
+          <div data-testid="tweet-text-show-more-link">Mostrar más</div>
+        </div>
+        <div data-testid="tweetPhoto"></div>
+        ${actionBar()}
+      </div>
+    </article>`;
+}
+
+test('screenshot miss-quote-video: RT of quote+video extracts commentary', () => {
+  const root = mount(fixtureMissQuoteVideo());
+  const cards = listTweetArticles(root);
+  const ready = cards.filter((card) => extractTweet(card));
+  assert.ok(ready.length >= 1);
+  const parent = ready.find((card) => extractTweet(card)?.id === '10001') ?? ready[0]!;
+  assertReadyBadge(parent, '10001', /frontier AI/);
+  assert.equal(extractTweet(parent)?.handle, '@vmg');
+  assert.equal(isRetweetCard(parent), true);
+});
+
+test('screenshot miss-quote-video: nested RT shell + quoted video card', () => {
+  const root = mount(fixtureMissQuoteVideoNestedShell());
+  const cards = listTweetArticles(root);
+  const shell = root.querySelector('#rt-shell') as HTMLElement;
+  assert.equal(cards.includes(shell), false);
+  const parent = cards.find((card) => card.id === 'quote-parent');
+  assert.ok(parent);
+  assertReadyBadge(parent, '10001', /frontier AI/);
+  const quoted = cards.find((card) => card.id === 'quoted');
+  assert.ok(quoted, 'quoted video card was dropped');
+  assertReadyBadge(quoted, '10011', /Plan IA360/);
+});
+
+test('screenshot miss-monos-video: caption+video extracts and badges outside the player', () => {
+  const root = mount(fixtureMissMonosVideo());
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.ok(item);
+  assert.equal(item.text.includes('Original'), false);
+  assertReadyBadge(cards[0]!, '10002', /chavales/);
+  assert.equal(item.handle, '@monospodcast');
+});
+
+test('screenshot hit-image-mostrar-mas: image + Mostrar más still extracts', () => {
+  const root = mount(fixtureHitMostrarMas());
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.ok(item);
+  assert.equal(item.text.includes('Mostrar más'), false);
+  assertReadyBadge(cards[0]!, '10003', /desempolvar/);
 });

@@ -132,12 +132,13 @@
 	//#region lib/tweet.ts
 	var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 	var MIN_TEXT = 4;
-	/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
+	var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"]";
+	/** Own tweetText first; then lang-caption; retweet shells fall back to nested. Never a node inside the player. */
 	function findTweetTextEl(article) {
-		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
-		for (const node of langCaptionNodes(article, false)) return node;
-		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent)) return node;
-		for (const node of langCaptionNodes(article, true)) return node;
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent) && !inMediaChrome(node)) return node;
+		for (const node of langCaptionNodes(article, false)) if (!inMediaChrome(node)) return node;
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent) && !inMediaChrome(node)) return node;
+		for (const node of langCaptionNodes(article, true)) if (!inMediaChrome(node)) return node;
 		return null;
 	}
 	function findActionBar(article) {
@@ -157,7 +158,8 @@
 		const out = [];
 		for (const node of queryDeep(article, "div[lang], span[lang]")) {
 			if (!allowNested && !belongsToArticle(node, article)) continue;
-			if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"], [role=\"group\"]")) continue;
+			if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"]")) continue;
+			if (inMediaChrome(node)) continue;
 			if (node.getAttribute("data-testid") === "tweetText") continue;
 			const t = cleanText(node.textContent);
 			if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
@@ -198,6 +200,9 @@
 	function usableText(value) {
 		const t = cleanText(value);
 		return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+	}
+	function inMediaChrome(node) {
+		return Boolean(node.closest(MEDIA_CHROME));
 	}
 	function realTweetCards(root) {
 		return queryDeep(root, "[data-testid=\"tweet\"]").filter((node) => !isMediaHusk(node));
