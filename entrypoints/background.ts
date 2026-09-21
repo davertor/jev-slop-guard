@@ -125,7 +125,7 @@ async function judge(tweet: { id: string; text: string; handle: string }): Promi
 
     const settings = await loadSettings();
     if (settings.paused) {
-      return { ok: false, code: 'PAUSED', error: 'Slop Guard is paused.' };
+      return { ok: false, code: 'PAUSED', error: 'Jev Slop Guard is paused.' };
     }
     if (!settings.apiKey.trim()) {
       return {

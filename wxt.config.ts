@@ -8,7 +8,7 @@ export default defineConfig({
     },
   }),
   manifest: {
-    name: 'Slop Guard',
+    name: 'Jev Slop Guard',
     description:
       'Real-time slop detector for X and LinkedIn: Slop / Stop badges, blur, and a SLOP stamp.',
     permissions: ['storage', 'scripting', 'tabs'],

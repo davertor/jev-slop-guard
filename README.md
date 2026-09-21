@@ -1,12 +1,12 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
-    <img src="docs/hero-light.png" width="900" alt="jev-slop-detector: stands between you and the slop on X and LinkedIn. Chrome extension, judged by Jev.">
+    <img src="docs/hero-light.png" width="900" alt="jev-slop-guard: stands between you and the slop on X and LinkedIn. Chrome extension, judged by Jev.">
   </picture>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.23-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.23">
+  <img src="https://img.shields.io/badge/version-0.1.24-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.24">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-57503f?style=flat-square&labelColor=191511" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/chrome-manifest%20v3-57503f?style=flat-square&labelColor=191511" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/sites-x.com%20%C2%B7%20linkedin.com-57503f?style=flat-square&labelColor=191511" alt="Works on x.com and linkedin.com">
@@ -18,7 +18,7 @@ Every post gets a small pill with a slop probability. Posts over your threshold
 get blurred and stamped **SLOP**, with a button to show them anyway. The verdict
 comes from [Jev](https://typesafe.ai), TypeSafe's System One model: one typed
 `{ slop, not_slop }` choice per post, no free-form LLM text, and you bring your
-own API key. It installs as **Slop Guard**.
+own API key.
 
 <p align="center">
   <picture>
@@ -73,7 +73,7 @@ Then load it:
 2. Turn on **Developer mode** (top-right toggle).
 3. Click **Load unpacked** and pick the folder: `chrome-mv3/` for Option A,
    `.output/chrome-mv3/` for Option B.
-4. Pin **Slop Guard** in the toolbar, open the popup, paste your API key, click **Save**.
+4. Pin **Jev Slop Guard** in the toolbar, open the popup, paste your API key, click **Save**.
 5. Open [x.com](https://x.com) or [linkedin.com/feed](https://www.linkedin.com/feed/)
    and scroll. Pills appear as verdicts come back.
 

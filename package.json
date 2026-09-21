@@ -1,5 +1,5 @@
 {
-  "name": "slop-guard",
+  "name": "jev-slop-guard",
   "description": "Label and hide AI-generated slop posts on X and LinkedIn.",
   "private": true,
   "license": "MIT",

@@ -876,7 +876,7 @@
 		if (document.querySelector(".slop-guard-banner")) return;
 		const banner = document.createElement("div");
 		banner.className = "slop-guard-banner";
-		banner.textContent = message ?? "Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.";
+		banner.textContent = message ?? "Jev Slop Guard: add your TypeSafe or OpenRouter API key in the extension popup.";
 		document.body.append(banner);
 	}
 	//#endregion
@@ -913,7 +913,7 @@
 			if (info.ok) ready += 1;
 			else {
 				missCounts.set(info.reason, (missCounts.get(info.reason) ?? 0) + 1);
-				console.debug("[slop-guard] extract", info.reason, card);
+				console.debug("[jev-slop-guard] extract", info.reason, card);
 			}
 		}
 		return {
@@ -1223,7 +1223,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/x-timeline.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/davertor/Python_projects/jev-slop-detector/entrypoints/x-timeline.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),
