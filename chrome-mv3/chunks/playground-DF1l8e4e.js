@@ -183,17 +183,22 @@ function queryDeep(root, selector) {
 function percent(p) {
 	return Math.round(Math.min(1, Math.max(0, p)) * 100);
 }
-function shouldStamp(verdict, threshold, stampEnabled) {
-	return stampEnabled && verdict.slopP >= threshold;
+function overThreshold(verdict, threshold) {
+	return verdict.slopP >= threshold;
 }
-function badgeCopy(verdict, stamped) {
-	if (stamped) return {
+function shouldStamp(verdict, threshold, stampEnabled) {
+	return stampEnabled && overThreshold(verdict, threshold);
+}
+/** Front copy always shows slopP so the pill matches the Slop threshold slider. */
+function badgeCopy(verdict, threshold) {
+	const n = percent(verdict.slopP);
+	if (overThreshold(verdict, threshold)) return {
 		tone: "stop",
-		text: `Stop | ${percent(verdict.slopP)}%`
+		text: `Stop | ${n}%`
 	};
 	return {
 		tone: "ok",
-		text: `Not slop | ${percent(verdict.notP)}%`
+		text: `Slop | ${n}%`
 	};
 }
 //#endregion
@@ -214,11 +219,10 @@ function applyVerdict(article, verdict, settings, opts = {}) {
 	article.dataset.slopLabel = verdict.label;
 	article.dataset.slopModel = verdict.model;
 	article.classList.add("slop-guard-card");
-	const over = shouldStamp(verdict, settings.threshold, settings.stampEnabled);
-	const copy = badgeCopy(verdict, over);
+	const copy = badgeCopy(verdict, settings.threshold);
 	if (copy.tone === "ok" && !settings.showNotSlop) clearBadge(article);
 	else upsertBadge(article, copy.text, copy.tone, copy.tone === "stop");
-	if (over && !opts.undone) stampArticle(article, () => opts.onPutBack?.(verdict.tweetId, article));
+	if (shouldStamp(verdict, settings.threshold, settings.stampEnabled) && !opts.undone) stampArticle(article, () => opts.onPutBack?.(verdict.tweetId, article));
 	else clearStamp(article);
 }
 function ownSlopRow(article) {

@@ -12,13 +12,22 @@ export function percent(p: number): number {
   return Math.round(Math.min(1, Math.max(0, p)) * 100);
 }
 
-export function shouldStamp(verdict: Verdict, threshold: number, stampEnabled: boolean): boolean {
-  return stampEnabled && verdict.slopP >= threshold;
+export function overThreshold(verdict: Pick<Verdict, 'slopP'>, threshold: number): boolean {
+  return verdict.slopP >= threshold;
 }
 
-export function badgeCopy(verdict: Verdict, stamped: boolean): { tone: 'ok' | 'stop'; text: string } {
-  if (stamped) {
-    return { tone: 'stop', text: `Stop | ${percent(verdict.slopP)}%` };
+export function shouldStamp(verdict: Verdict, threshold: number, stampEnabled: boolean): boolean {
+  return stampEnabled && overThreshold(verdict, threshold);
+}
+
+/** Front copy always shows slopP so the pill matches the Slop threshold slider. */
+export function badgeCopy(
+  verdict: Pick<Verdict, 'slopP'>,
+  threshold: number,
+): { tone: 'ok' | 'stop'; text: string } {
+  const n = percent(verdict.slopP);
+  if (overThreshold(verdict, threshold)) {
+    return { tone: 'stop', text: `Stop | ${n}%` };
   }
-  return { tone: 'ok', text: `Not slop | ${percent(verdict.notP)}%` };
+  return { tone: 'ok', text: `Slop | ${n}%` };
 }

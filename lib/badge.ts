@@ -30,16 +30,18 @@ export function applyVerdict(
   article.dataset.slopModel = verdict.model;
   article.classList.add('slop-guard-card');
 
-  const over = shouldStamp(verdict, settings.threshold, settings.stampEnabled);
-  const copy = badgeCopy(verdict, over);
+  const copy = badgeCopy(verdict, settings.threshold);
   if (copy.tone === 'ok' && !settings.showNotSlop) {
     clearBadge(article);
   } else {
     upsertBadge(article, copy.text, copy.tone, copy.tone === 'stop');
   }
 
-  if (over && !opts.undone) stampArticle(article, () => opts.onPutBack?.(verdict.tweetId, article));
-  else clearStamp(article);
+  if (shouldStamp(verdict, settings.threshold, settings.stampEnabled) && !opts.undone) {
+    stampArticle(article, () => opts.onPutBack?.(verdict.tweetId, article));
+  } else {
+    clearStamp(article);
+  }
 }
 
 export function reapplyFromDataset(
