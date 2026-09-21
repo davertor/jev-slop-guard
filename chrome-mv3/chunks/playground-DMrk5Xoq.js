@@ -64,13 +64,25 @@ function listTweetArticles(root = document) {
 		return !nested.some((card) => extractTweet(card));
 	});
 }
+/**
+* Real ads only. Do NOT treat `placementTracking` alone as promoted — X often
+* puts that on organic timeline cards (probe showed 6/7 "promoted" false positives).
+*/
 function isPromoted(article) {
-	if (article.querySelector("[data-testid=\"placementTracking\"], [data-testid=\"promotedIndicator\"]")) return true;
+	if (article.querySelector("[data-testid=\"promotedIndicator\"]")) return true;
 	for (const el of article.querySelectorAll("span")) {
 		const text = el.textContent?.trim();
-		if (text === "Promoted" || text === "Promoted by" || text === "Promocionado") return true;
+		if (looksPromotedLabel(text ?? "")) return true;
+	}
+	const tracking = article.querySelector("[data-testid=\"placementTracking\"]");
+	if (tracking) {
+		const blob = (tracking.textContent ?? "") + " " + (tracking.parentElement?.textContent ?? "");
+		if (/\bPromoted\b|\bPromocionado\b/i.test(blob)) return true;
 	}
 	return false;
+}
+function looksPromotedLabel(text) {
+	return text === "Promoted" || text === "Promoted by" || text === "Promocionado";
 }
 /** Match X socialContext blobs: "Name reposted" / Spanish "repostó" / "reposteó". */
 function isRetweetContext(blob) {
