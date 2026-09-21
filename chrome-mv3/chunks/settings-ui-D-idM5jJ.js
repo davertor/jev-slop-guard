@@ -31,7 +31,7 @@ var SETTINGS_FORM_HTML = `
 
   <label class="switch wide">
     <input id="showNotSlop" type="checkbox" />
-    <span>Show green “Not slop” badge on clean posts</span>
+    <span>Show badge when under threshold</span>
   </label>
 
   <div class="row">
