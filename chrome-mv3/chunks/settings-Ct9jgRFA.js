@@ -67,7 +67,7 @@ function sendTabMessage(tabId, message) {
 	});
 }
 //#endregion
-//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
+//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/browser.mjs
 /**
 * Contains the `browser` export which you should use to access the extension
 * APIs in your project:

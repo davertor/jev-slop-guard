@@ -1,4 +1,4 @@
-import { a as chromeApi, c as sendTabMessage, n as loadSettings, o as isXUrl, r as saveSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-DB1zihqq.js";
+import { a as chromeApi, c as sendTabMessage, n as loadSettings, o as isXUrl, r as saveSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-Ct9jgRFA.js";
 //#region lib/settings-ui.ts
 var SETTINGS_FORM_HTML = `
   <header>
