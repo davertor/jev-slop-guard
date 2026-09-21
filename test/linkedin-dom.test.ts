@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseHTML } from 'linkedom';
-import { applyVerdict, ownSlopRow } from '../lib/badge';
+import { applyVerdict, clearStamp, ownSlopRow } from '../lib/badge';
 import { extractLinkedInPost, listLinkedInArticles } from '../lib/linkedin';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 import { isLinkedInUrl } from '../lib/chrome-msg';
@@ -11,6 +11,7 @@ Object.assign(globalThis, {
   window,
   document,
   HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Document: window.Document,
   Node: window.Node,
@@ -268,4 +269,40 @@ test('extract LinkedIn FeedType collapsed Garmin-like post yields long body', ()
   assert.ok(item);
   assert.ok(item!.text.includes('private trainer') || item!.text.includes('Strava'), item!.text);
   assert.ok(item!.text.length > 100, `too short: ${item!.text.length}`);
+});
+
+test('regression LI Show the post: clearStamp removes overlay on LinkedIn cards', () => {
+  const root = mount(`
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7009999999" id="stamp-post">
+      <div class="feed-shared-update-v2__commentary update-components-text">
+        <span dir="ltr">A clearly empty personal-brand flex post that should stamp as slop for this regression.</span>
+      </div>
+    </div>`);
+  const article = root.querySelector('#stamp-post') as HTMLElement;
+  let putBackCalls = 0;
+  applyVerdict(
+    article,
+    {
+      tweetId: 'li-activity-7009999999',
+      label: 'slop' as const,
+      slopP: 0.95,
+      notP: 0.05,
+      model: 'jev-latest',
+    },
+    { ...DEFAULT_SETTINGS, showNotSlop: true, stampEnabled: true, threshold: 0.7 },
+    {
+      onPutBack: () => {
+        putBackCalls += 1;
+        clearStamp(article);
+      },
+    },
+  );
+  assert.equal(article.querySelectorAll('.slop-guard-overlay').length, 1);
+  assert.ok(article.classList.contains('slop-guard-stamped'));
+  const btn = article.querySelector('.slop-guard-putback') as HTMLButtonElement;
+  assert.ok(btn);
+  btn.click();
+  assert.equal(putBackCalls, 1);
+  assert.equal(article.querySelectorAll('.slop-guard-overlay').length, 0, 'overlay must be gone after Show the post');
+  assert.equal(article.classList.contains('slop-guard-stamped'), false);
 });
