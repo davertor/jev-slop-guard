@@ -8,6 +8,9 @@ export type ExtractedTweet = {
 const STATUS_RE = /\/status\/(\d+)/;
 const REPOST_RE =
   /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwitte[oó]|ha\s+retwitteado|ha\s+reposteado|retuite[oó]/i;
+const SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
+const SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
+const MIN_TEXT = 4;
 
 export function tweetIdFromHref(href: string): string | null {
   const match = href.match(STATUS_RE);
@@ -18,15 +21,15 @@ export function extractTweet(article: HTMLElement): ExtractedTweet | null {
   if (isPromoted(article)) return null;
 
   const text = ownTweetText(article);
-  if (text.length < 8) return null;
+  if (text.length < MIN_TEXT) return null;
 
-  const id = ownTweetId(article);
-  if (!id) return null;
+  const handle = ownHandle(article);
+  const id = ownTweetId(article) ?? syntheticId(handle, text);
 
   return {
     id,
     text: text.slice(0, 4000),
-    handle: ownHandle(article),
+    handle,
     article,
   };
 }
@@ -40,7 +43,8 @@ export function extractTweet(article: HTMLElement): ExtractedTweet | null {
 export function listTweetArticles(root: ParentNode = document): HTMLElement[] {
   const all = uniqueElements([...queryDeep(root, '[data-testid="tweet"]'), ...articlesFromCells(root)]);
   return all.filter((article) => {
-    const nested = nestedTweetCards(article);
+    if (isMediaHusk(article)) return false;
+    const nested = nestedTweetCards(article).filter((card) => !isMediaHusk(card));
     if (nested.length === 0) return true;
     if (hasOwnTweetBody(article)) return true;
     return !nested.some((card) => extractTweet(card));
@@ -83,14 +87,16 @@ export function isRetweetCard(article: HTMLElement): boolean {
   return false;
 }
 
-/** Own tweetText first; retweet shells fall back to the nested original. */
+/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
 export function findTweetTextEl(article: HTMLElement): HTMLElement | null {
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
-    if (belongsToArticle(node, article)) return node;
+    if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
   }
+  for (const node of langCaptionNodes(article, false)) return node;
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
-    return node;
+    if (usableText(node.textContent)) return node;
   }
+  for (const node of langCaptionNodes(article, true)) return node;
   return null;
 }
 
@@ -107,25 +113,31 @@ export function findActionBar(article: HTMLElement): HTMLElement | null {
 }
 
 function hasOwnTweetBody(article: HTMLElement): boolean {
-  return collectTweetText(article, false).length >= 8;
+  return collectTweetText(article, false).length >= MIN_TEXT || collectFallbackText(article, false).length >= MIN_TEXT;
 }
 
 function ownTweetText(article: HTMLElement): string {
   const own = collectTweetText(article, false);
-  if (own) return own;
+  if (own.length >= MIN_TEXT) return own;
+  const ownFallback = collectFallbackText(article, false);
+  if (ownFallback.length >= MIN_TEXT) return ownFallback;
   if (isRetweetCard(article) || nestedTweetCards(article).length > 0) {
-    return collectTweetText(article, true);
+    const nested = collectTweetText(article, true);
+    if (nested.length >= MIN_TEXT) return nested;
+    const nestedFallback = collectFallbackText(article, true);
+    if (nestedFallback.length >= MIN_TEXT) return nestedFallback;
   }
-  return '';
+  return own || ownFallback;
 }
 
 function collectTweetText(article: HTMLElement, allowNested: boolean): string {
   const parts: string[] = [];
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
     if (!allowNested && !belongsToArticle(node, article)) continue;
-    const t = node.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const t = cleanText(node.textContent);
+    if (SHOW_MORE_RE.test(t)) continue;
     if (allowNested) {
-      if (t.length >= 8) return t;
+      if (t.length >= MIN_TEXT) return t;
       continue;
     }
     if (t) parts.push(t);
@@ -133,13 +145,40 @@ function collectTweetText(article: HTMLElement, allowNested: boolean): string {
   return parts.join('\n').trim();
 }
 
-function ownTweetId(article: HTMLElement): string | null {
-  const own = collectTweetId(article, false);
-  if (own) return own;
-  if (isRetweetCard(article) || nestedTweetCards(article).length > 0) {
-    return collectTweetId(article, true);
+function collectFallbackText(article: HTMLElement, allowNested: boolean): string {
+  for (const link of queryDeep(article, '[data-testid="tweet-text-show-more-link"]')) {
+    if (!allowNested && !belongsToArticle(link, article)) continue;
+    const host = link.parentElement ?? link;
+    const t = cleanText(host.textContent).replace(SHOW_MORE_TAIL, '').trim();
+    if (t.length >= MIN_TEXT) return t;
   }
-  return null;
+  const parts: string[] = [];
+  for (const node of langCaptionNodes(article, allowNested)) {
+    parts.push(cleanText(node.textContent));
+  }
+  parts.sort((a, b) => b.length - a.length);
+  return parts[0] ?? '';
+}
+
+function langCaptionNodes(article: HTMLElement, allowNested: boolean): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (const node of queryDeep(article, 'div[lang], span[lang]')) {
+    if (!allowNested && !belongsToArticle(node, article)) continue;
+    if (node.closest('[data-testid="User-Name"], [data-testid="socialContext"], [role="group"]')) continue;
+    if (node.getAttribute('data-testid') === 'tweetText') continue;
+    const t = cleanText(node.textContent);
+    if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
+    out.push(node);
+  }
+  return out;
+}
+
+function ownTweetId(article: HTMLElement): string | null {
+  return (
+    collectTweetId(article, false) ??
+    collectTweetId(article, true) ??
+    collectIdAround(article)
+  );
 }
 
 function collectTweetId(article: HTMLElement, allowNested: boolean): string | null {
@@ -157,19 +196,39 @@ function collectTweetId(article: HTMLElement, allowNested: boolean): string | nu
   return null;
 }
 
+/** Media cards often move /status/:id to a cell overlay or a wrapping <a>. */
+function collectIdAround(article: HTMLElement): string | null {
+  const wrap = article.closest('a[href*="/status/"]');
+  if (wrap instanceof HTMLElement) {
+    const id = tweetIdFromHref(wrap.getAttribute('href') ?? '');
+    if (id) return id;
+  }
+  const scope = article.closest('[data-testid="cellInnerDiv"]') ?? article.parentElement;
+  if (!scope) return null;
+  const time = queryDeep(scope, 'time')[0];
+  const timeLink = time?.closest('a');
+  if (timeLink) {
+    const id = tweetIdFromHref(timeLink.getAttribute('href') ?? '');
+    if (id) return id;
+  }
+  for (const a of queryDeep(scope, 'a[href*="/status/"]')) {
+    const id = tweetIdFromHref(a.getAttribute('href') ?? '');
+    if (id) return id;
+  }
+  return null;
+}
+
 function ownHandle(article: HTMLElement): string {
   for (const a of queryDeep(article, '[data-testid="User-Name"] a[href^="/"]')) {
     if (!belongsToArticle(a, article)) continue;
     const handle = (a.getAttribute('href') ?? '').replace(/^\//, '').split('/')[0];
     if (handle && handle !== 'i') return `@${handle}`;
   }
-  if (isRetweetCard(article) || nestedTweetCards(article).length > 0) {
-    for (const a of queryDeep(article, 'a[href^="/"]')) {
-      const href = a.getAttribute('href') ?? '';
-      if (href.includes('/status/')) continue;
-      const handle = href.replace(/^\//, '').split('/')[0];
-      if (handle && !['home', 'explore', 'search', 'i'].includes(handle)) return `@${handle}`;
-    }
+  for (const a of queryDeep(article, '[data-testid="User-Name"] a[href^="/"], a[href^="/"]')) {
+    const href = a.getAttribute('href') ?? '';
+    if (href.includes('/status/')) continue;
+    const handle = href.replace(/^\//, '').split('/')[0];
+    if (handle && !['home', 'explore', 'search', 'i'].includes(handle)) return `@${handle}`;
   }
   return '';
 }
@@ -179,23 +238,76 @@ export function belongsToArticle(node: Element, article: HTMLElement): boolean {
 }
 
 export function tweetCardOwner(node: Element): HTMLElement | null {
-  const owner = node.closest('[data-testid="tweet"]') ?? node.closest('[data-testid="cellInnerDiv"]');
-  return owner instanceof HTMLElement ? owner : null;
+  let scope: HTMLElement | null =
+    node.closest('[data-testid="tweet"]') ?? node.closest('[data-testid="cellInnerDiv"]');
+  while (scope) {
+    if (scope.getAttribute('data-testid') === 'tweet' && !isMediaHusk(scope)) return scope;
+    if (scope.getAttribute('data-testid') === 'cellInnerDiv' && realTweetCards(scope).length === 0) {
+      return scope;
+    }
+    const parent = scope.parentElement;
+    scope = parent
+      ? (parent.closest('[data-testid="tweet"]') ?? parent.closest('[data-testid="cellInnerDiv"]'))
+      : null;
+  }
+  const fallback = node.closest('[data-testid="tweet"]') ?? node.closest('[data-testid="cellInnerDiv"]');
+  return fallback instanceof HTMLElement ? fallback : null;
+}
+
+function hasOwnAuthor(article: HTMLElement): boolean {
+  for (const node of article.querySelectorAll('[data-testid="User-Name"]')) {
+    if (!(node instanceof HTMLElement)) continue;
+    const owner = node.closest('[data-testid="tweet"]');
+    if (owner === article) return true;
+    if (!owner && article.getAttribute('data-testid') === 'cellInnerDiv') return true;
+  }
+  return false;
+}
+
+/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. */
+function isMediaHusk(el: HTMLElement): boolean {
+  return el.getAttribute('data-testid') === 'tweet' && !hasOwnAuthor(el);
+}
+
+function cleanText(value: string | null | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function usableText(value: string | null | undefined): boolean {
+  const t = cleanText(value);
+  return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+}
+
+function syntheticId(handle: string, text: string): string {
+  const who = handle.replace(/^@/, '') || 'anon';
+  let h = 0;
+  for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return `x-${who}-${Math.abs(h)}`;
 }
 
 function nestedTweetCards(article: HTMLElement): HTMLElement[] {
   return queryDeep(article, '[data-testid="tweet"]').filter((node) => node !== article);
 }
 
+function realTweetCards(root: ParentNode): HTMLElement[] {
+  return queryDeep(root, '[data-testid="tweet"]').filter((node) => !isMediaHusk(node));
+}
+
 function articlesFromCells(root: ParentNode): HTMLElement[] {
   const out: HTMLElement[] = [];
   for (const cell of queryDeep(root, '[data-testid="cellInnerDiv"]')) {
-    const nested = queryDeep(cell, '[data-testid="tweet"]');
-    if (nested.length > 0) {
-      out.push(...nested);
+    const real = realTweetCards(cell);
+    if (real.length > 0) {
+      out.push(...real);
       continue;
     }
-    if (queryDeep(cell, '[data-testid="tweetText"]').length > 0) out.push(cell);
+    if (
+      queryDeep(cell, '[data-testid="tweetText"]').length > 0 ||
+      queryDeep(cell, '[data-testid="User-Name"]').length > 0 ||
+      langCaptionNodes(cell, true).length > 0
+    ) {
+      out.push(cell);
+    }
   }
   return out;
 }
