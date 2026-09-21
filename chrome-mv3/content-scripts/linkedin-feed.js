@@ -132,7 +132,9 @@
 	//#region lib/tweet.ts
 	var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 	var MIN_TEXT = 4;
-	var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.layoutLarge.media\"], [data-testid=\"card.layoutSmall.media\"]";
+	var HARD_MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.layoutLarge.media\"], [data-testid=\"card.layoutSmall.media\"]";
+	var SOFT_MEDIA_CHROME = "[data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]";
+	var MEDIA_CHROME = `${HARD_MEDIA_CHROME}, ${SOFT_MEDIA_CHROME}`;
 	var PLAYER_OVERLAY_RE = /^(Original|AI|GIF|Play|Pause|Video|Live)$/i;
 	var CAPTION_SEL = "div[lang], span[lang], div[dir=\"auto\"], span[dir=\"auto\"]";
 	/** Own tweetText first; then lang/dir=auto caption; retweet shells fall back to nested. Never a node inside the player. */
@@ -230,13 +232,19 @@
 		return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t) && !PLAYER_OVERLAY_RE.test(t);
 	}
 	function inMediaChrome(node) {
-		if (node.closest(MEDIA_CHROME)) return true;
+		if (node.closest(HARD_MEDIA_CHROME)) return true;
+		if (node.closest(SOFT_MEDIA_CHROME) && !isSoftChromeCaption(node)) return true;
 		let root = node.getRootNode();
 		while (root.host instanceof Element) {
-			if (root.host.matches(MEDIA_CHROME) || root.host.closest(MEDIA_CHROME)) return true;
+			if (root.host.matches(HARD_MEDIA_CHROME) || root.host.closest(HARD_MEDIA_CHROME)) return true;
+			if ((root.host.matches(SOFT_MEDIA_CHROME) || root.host.closest(SOFT_MEDIA_CHROME)) && !isSoftChromeCaption(node)) return true;
 			root = root.host.getRootNode();
 		}
 		return false;
+	}
+	function isSoftChromeCaption(node) {
+		if (!usableText(node.textContent)) return false;
+		return node.getAttribute("data-testid") === "tweetText" || node.matches(CAPTION_SEL);
 	}
 	function realTweetCards(root) {
 		return queryDeep(root, "[data-testid=\"tweet\"]").filter((node) => !isMediaHusk(node));

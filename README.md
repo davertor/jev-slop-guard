@@ -51,7 +51,7 @@ At or above threshold: red **Stop \| NN%** (`slopP`).
 - Observes `article[data-testid="tweet"]` (`MutationObserver` + `IntersectionObserver`)
 - Debounced scan, concurrency 2, cache by `/status/:id`
 - Never blocks scroll; latency is visible on purpose (clean post → then badge)
-- Skips Promoted / `placementTracking` ads
+- Skips Promoted / `placementTracking` ads and Who to follow / `UserCell` widgets
 - Optional corner chip shows the resolved model (`Jev-latest`)
 - Home timeline probe chip (inline styles, next to Para ti / Siguiendo): `X script live · N cards · M ready` (if extract fails: `· N no-text` / `promoted`; `console.debug('[slop-guard] extract', reason, card)`)
 - Background service worker injects the X content script into matching tabs (not manifest-only)
