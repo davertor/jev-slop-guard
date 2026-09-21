@@ -1,7 +1,8 @@
 {
   "name": "slop-guard",
-  "description": "Label and hide AI-generated slop posts on X (Twitter).",
+  "description": "Label and hide AI-generated slop posts on X and LinkedIn.",
   "private": true,
+  "license": "MIT",
   "version": "0.1.21",
   "type": "module",
   "scripts": {
