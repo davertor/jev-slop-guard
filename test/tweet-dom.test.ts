@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom';
 import { applyVerdict, ownSlopRow, reapplyFromDataset } from '../lib/badge';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 import {
+  explainExtract,
   extractTweet,
   findActionBar,
   findTweetTextEl,
@@ -435,7 +436,12 @@ function assertReadyBadge(article: HTMLElement, id: string, text: RegExp): void 
   applyVerdict(article, notSlop(id), DEFAULT_SETTINGS);
   const row = ownSlopRow(article);
   assert.ok(row, 'badge row missing after applyVerdict');
-  assert.equal(row.closest('[data-testid="videoPlayer"], [data-testid="videoComponent"]'), null);
+  assert.equal(
+    row.closest(
+      '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="previewInterstitial"], [data-testid="card.wrapper"]',
+    ),
+    null,
+  );
   assert.match(row.textContent ?? '', /Slop \| 2%/);
 }
 
@@ -596,4 +602,189 @@ test('screenshot hit-image-mostrar-mas: image + Mostrar más still extracts', ()
   assert.ok(item);
   assert.equal(item.text.includes('Mostrar más'), false);
   assertReadyBadge(cards[0]!, '10003', /desempolvar/);
+});
+
+/**
+ * miss-linus-video.png — @LinusEkenstam native video (2:35, face-cam inset) +
+ * caption; NO badge. Same viewport: text RT “Borja Perez reposteó”
+ * @G_Programming with green Slop | 19% (control).
+ *
+ * Live X deltas vs 0.1.14 monos fixture:
+ * - Caption is dir=auto (no tweetText, no lang)
+ * - Status id is /i/status/:id on the cell overlay; timestamp is unlinked
+ * - previewInterstitial + player tweetText (“Original” / “AI”) sit outside
+ *   videoPlayer and must not steal extract or the badge insert target
+ * - Face-cam is a nested [data-testid=tweet] WITH User-Name inside the player
+ * - Outer role=group aria-labelledby + long aria-label (player chrome words)
+ */
+function fixtureMissLinusVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/i/status/11001" aria-label="View post"></a>
+      <article data-testid="tweet" id="linus">
+        <div role="group" aria-labelledby="linus-name linus-caption" aria-label="Linus Ekenstam You just created everything LUMIERE Perspective 1920 x 1012 orbit Scroll to zoom 2:35">
+          <div id="linus-name" data-testid="User-Name">
+            <a href="/LinusEkenstam"><span>Linus Ekenstam</span></a>
+            <a href="/LinusEkenstam">@LinusEkenstam</a>
+          </div>
+          <time>1h</time>
+          <div id="linus-caption" dir="auto">You just created everything, inspired by timeline. What a time to be alive</div>
+          <div data-testid="previewInterstitial">
+            <div data-testid="tweetText">Original</div>
+          </div>
+          <div data-testid="videoComponent">
+            <div data-testid="tweet">
+              <div data-testid="videoPlayer">
+                <div aria-live="polite" aria-label="Video player LUMIERE Perspective">
+                  <time datetime="PT2M35S">2:35</time>
+                  <div data-testid="tweetText">AI</div>
+                </div>
+              </div>
+            </div>
+            <div data-testid="tweet" id="linus-facecam">
+              <div data-testid="User-Name"><a href="/LinusEkenstam">@LinusEkenstam</a></div>
+            </div>
+          </div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>
+    <div data-testid="cellInnerDiv">
+      <article data-testid="tweet" id="borja-rt">
+        <div>
+          <a data-testid="socialContext" href="/BorjaPerez">Borja Perez</a>
+          <span> reposteó</span>
+        </div>
+        ${tweetBody({
+          id: '11009',
+          handle: 'G_Programming',
+          name: 'Gentleman Programming',
+          text: 'Lo digo sin asco, Qwen 3.8, GLM 5.3 y DeepSeek 4.1 tambien sus versiones flash cumplen el 90% de las necesidades sobre un buen harness',
+        })}
+      </article>
+    </div>`;
+}
+
+/**
+ * miss-quote-monos-video.png — @JavierSirvent quote of @monospodcast with
+ * video (2:11) in the quoted card; outer has commentary + YouTube link; NO badge.
+ *
+ * Live X deltas vs 0.1.14 quote+video fixtures:
+ * - First-party quote (not an RT shell)
+ * - Commentary is dir=auto (no tweetText / lang) plus a YouTube URL
+ * - YouTube preview is data-testid=card.wrapper (must not swallow the caption)
+ * - Quoted card is role=link (not data-testid=tweet) with dir=auto + video husk
+ * - Status id is /i/status/:id on the cell overlay; outer time is unlinked
+ * - Outer role=group aria-labelledby includes quote + player chrome
+ */
+function fixtureMissSirventQuoteVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/i/status/11002" aria-label="View post"></a>
+      <article data-testid="tweet" id="sirvent">
+        <div role="group" aria-labelledby="js-name js-caption js-quote" aria-label="Javier Sirvent Conte hace 14 anos monospodcast Neuralink 2:11">
+          <div id="js-name" data-testid="User-Name">
+            <a href="/JavierSirvent"><span>Javier Sirvent</span></a>
+            <a href="/JavierSirvent">@JavierSirvent</a>
+          </div>
+          <time>20 sept.</time>
+          <div id="js-caption" dir="auto">Conte hace 14 anos que el presente fue ciencia ficcion; explique lo que ahora es un producto comercial. Para ser mi primera vez hablando en publico, fueron 25000 personas, retransmitido en directo. Companeros y amigos de esta tarde fueron @stevewoz @geochurch youtube.com/watch?v=3688abcd</div>
+          <div data-testid="card.wrapper">
+            <div data-testid="card.layoutLarge.media">
+              <a href="https://youtube.com/watch?v=3688abcd">YouTube</a>
+            </div>
+          </div>
+          <div id="js-quote" role="link" tabindex="0">
+            <div data-testid="User-Name">
+              <a href="/monospodcast"><span>monos estocasticos</span></a>
+              <a href="/monospodcast">@monospodcast</a>
+            </div>
+            <div dir="auto">Nos ha dejado maravillados este video de paciente con implante cerebral Neuralink: el interfaz cerebro a voz permitio a este enfermo de ELA pensar las palabras y que el ordenador las reprodujera con su propia voz</div>
+            ${videoHusk('2:11', 'PT2M11S', '<div data-testid="tweetText">Original</div><span>AI</span>')}
+          </div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+/**
+ * miss-quote-monos-video.png nesting variant — quoted original is a real
+ * [data-testid=tweet] (not just role=link), still with video husk + /i/status id.
+ */
+function fixtureMissSirventQuoteVideoNested(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <a href="/i/status/11002" aria-label="View post"></a>
+      <article data-testid="tweet" id="sirvent-parent">
+        <div role="group" aria-labelledby="sp-name sp-caption">
+          <div id="sp-name" data-testid="User-Name">
+            <a href="/JavierSirvent"><span>Javier Sirvent</span></a>
+            <a href="/JavierSirvent">@JavierSirvent</a>
+          </div>
+          <time>20 sept.</time>
+          <div id="sp-caption" dir="auto">Conte hace 14 anos que el presente fue ciencia ficcion; explique lo que ahora es un producto comercial. youtube.com/watch?v=3688abcd</div>
+          <div data-testid="card.wrapper">
+            <div data-testid="card.layoutLarge.media"><span>YouTube</span></div>
+          </div>
+          <article data-testid="tweet" id="sirvent-quoted">
+            <div data-testid="User-Name"><a href="/monospodcast">@monospodcast</a></div>
+            <a href="/monospodcast/status/11012"><time>20 sept.</time></a>
+            <div dir="auto">Nos ha dejado maravillados este video de paciente con implante cerebral Neuralink</div>
+            ${videoHusk('2:11', 'PT2M11S')}
+          </article>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+test('screenshot miss-linus-video: native video + dir=auto caption extracts and badges', () => {
+  const root = mount(fixtureMissLinusVideo());
+  const cards = listTweetArticles(root);
+  const linus = cards.find((card) => card.id === 'linus');
+  assert.ok(linus, 'Linus video card was not listed');
+  const info = explainExtract(linus);
+  assert.equal(info.ok, true, info.reason);
+  const item = extractTweet(linus);
+  assert.ok(item);
+  assert.equal(item.text.includes('Original'), false);
+  assert.equal(item.text.includes('LUMIERE'), false);
+  assertReadyBadge(linus, '11001', /created everything/);
+  assert.equal(item.handle, '@LinusEkenstam');
+  assert.equal(linus.querySelector('#linus-facecam') && listTweetArticles(root).includes(root.querySelector('#linus-facecam') as HTMLElement), false);
+});
+
+test('screenshot miss-linus-video: control text RT in the same viewport still badges', () => {
+  const root = mount(fixtureMissLinusVideo());
+  const rt = listTweetArticles(root).find((card) => card.id === 'borja-rt');
+  assert.ok(rt, 'Borja text RT control was not listed');
+  assertReadyBadge(rt, '11009', /DeepSeek/);
+  assert.equal(isRetweetCard(rt), true);
+});
+
+test('screenshot miss-quote-monos-video: quote + YouTube + quoted video extracts', () => {
+  const root = mount(fixtureMissSirventQuoteVideo());
+  const cards = listTweetArticles(root);
+  const parent = cards.find((card) => card.id === 'sirvent') ?? cards[0];
+  assert.ok(parent, 'Sirvent quote card was not listed');
+  const info = explainExtract(parent);
+  assert.equal(info.ok, true, info.reason);
+  const item = extractTweet(parent);
+  assert.ok(item);
+  assert.equal(item.text.includes('Original'), false);
+  assert.equal(item.text.includes('YouTube'), false);
+  assertReadyBadge(parent, '11002', /ciencia ficcion/);
+  assert.equal(item.handle, '@JavierSirvent');
+});
+
+test('screenshot miss-quote-monos-video: nested quoted video card also badges', () => {
+  const root = mount(fixtureMissSirventQuoteVideoNested());
+  const cards = listTweetArticles(root);
+  const parent = cards.find((card) => card.id === 'sirvent-parent');
+  assert.ok(parent);
+  assertReadyBadge(parent, '11002', /ciencia ficcion/);
+  const quoted = cards.find((card) => card.id === 'sirvent-quoted');
+  assert.ok(quoted, 'quoted video card was dropped');
+  assertReadyBadge(quoted, '11012', /Neuralink/);
 });

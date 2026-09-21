@@ -41,6 +41,7 @@ export type XStatusResult = {
   live: true;
   cards: number;
   ready: number;
+  miss?: string;
 };
 
 export type InjectXResult = { ok: true } | { ok: false; error: string };
