@@ -1,4 +1,4 @@
-import { i as browser, n as loadSettings, t as DEFAULT_SETTINGS } from "./settings-Bx26lDkM.js";
+import { i as browser, n as loadSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-DB1zihqq.js";
 //#region lib/verdict.ts
 function percent(p) {
 	return Math.round(Math.min(1, Math.max(0, p)) * 100);
@@ -46,9 +46,13 @@ function upsertBadge(article, text, tone, dot) {
 	if (!row) {
 		row = document.createElement("div");
 		row.className = ROW_CLASS;
-		const tweetText = [...article.querySelectorAll("[data-testid=\"tweetText\"]")].find((node) => node instanceof HTMLElement && node.closest("article[data-testid=\"tweet\"]") === article);
-		if (tweetText?.parentElement) tweetText.parentElement.insertBefore(row, tweetText.nextSibling);
-		else article.append(row);
+		const tweetText = [...article.querySelectorAll("[data-testid=\"tweetText\"]")].find((node) => node instanceof HTMLElement && (node.closest("article[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]")) === article);
+		if (tweetText) tweetText.insertAdjacentElement("afterend", row);
+		else {
+			const media = article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"card.wrapper\"]");
+			if (media) media.insertAdjacentElement("beforebegin", row);
+			else article.append(row);
+		}
 	}
 	let badge = row.querySelector(`.${BADGE_CLASS}`);
 	if (!badge) {
@@ -103,37 +107,77 @@ function clearStamp(article) {
 }
 //#endregion
 //#region lib/tweet.ts
+var REPOST_RE = /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwitte[oó]|ha\s+retwitteado/i;
 /**
 * Timeline cards, including retweets. If a card nests another tweet (quote),
 * keep the parent when it has its own text; always keep leaves.
 */
 function listTweetArticles(root = document) {
-	return [...root.querySelectorAll("article[data-testid=\"tweet\"]")].filter((node) => node instanceof HTMLElement).filter((article) => {
+	let all = [...root.querySelectorAll("article[data-testid=\"tweet\"]")].filter((node) => node instanceof HTMLElement);
+	if (all.length === 0) all = uniqueElements([...queryDeep(root, "article[data-testid=\"tweet\"]"), ...articlesFromCells(root)]);
+	return all.filter((article) => {
 		if (!article.querySelector("article[data-testid=\"tweet\"]")) return true;
 		return ownTweetText(article).length >= 8;
 	});
 }
+/** Match X socialContext blobs: "Name reposted" / Spanish "repostó" / "reposteó". */
+function isRetweetContext(blob) {
+	return REPOST_RE.test(blob);
+}
 function isRetweetCard(article) {
-	const social = article.querySelector("[data-testid=\"socialContext\"]");
+	const social = queryDeep(article, "[data-testid=\"socialContext\"]")[0];
 	if (!social) return false;
-	const blob = (social.textContent ?? "").toLowerCase();
-	return /reposteó|reposted|retweeted|repostió|ha retwitteado/.test(blob);
+	return isRetweetContext(social.textContent ?? "");
 }
 /** Text for this card (not nested quoted tweets). Falls back for retweet shells. */
 function ownTweetText(article) {
 	const parts = [];
-	for (const node of article.querySelectorAll("[data-testid=\"tweetText\"]")) {
-		if (!(node instanceof HTMLElement)) continue;
-		if (node.closest("article[data-testid=\"tweet\"]") !== article) continue;
+	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) {
+		if (!belongsToArticle(node, article)) continue;
 		const t = node.textContent?.replace(/\s+/g, " ").trim() ?? "";
 		if (t) parts.push(t);
 	}
 	if (parts.length > 0) return parts.join("\n").trim();
-	if (isRetweetCard(article)) for (const node of article.querySelectorAll("[data-testid=\"tweetText\"]")) {
+	if (isRetweetCard(article)) for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) {
 		const t = node.textContent?.replace(/\s+/g, " ").trim() ?? "";
 		if (t.length >= 8) return t;
 	}
 	return "";
+}
+function belongsToArticle(node, article) {
+	return (node.closest("article[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]")) === article;
+}
+function articlesFromCells(root) {
+	const out = [];
+	for (const cell of queryDeep(root, "[data-testid=\"cellInnerDiv\"]")) {
+		const nested = queryDeep(cell, "article[data-testid=\"tweet\"]");
+		if (nested.length > 0) {
+			out.push(...nested);
+			continue;
+		}
+		if (queryDeep(cell, "[data-testid=\"tweetText\"]").length > 0) out.push(cell);
+	}
+	return out;
+}
+function uniqueElements(els) {
+	const seen = /* @__PURE__ */ new Set();
+	const out = [];
+	for (const el of els) {
+		if (seen.has(el)) continue;
+		seen.add(el);
+		out.push(el);
+	}
+	return out;
+}
+/** querySelectorAll plus one-level-or-deeper shadow roots (X sometimes wraps cells). */
+function queryDeep(root, selector) {
+	const out = [];
+	const visit = (node) => {
+		for (const el of node.querySelectorAll(selector)) if (el instanceof HTMLElement) out.push(el);
+		for (const el of node.querySelectorAll("*")) if (el instanceof HTMLElement && el.shadowRoot) visit(el.shadowRoot);
+	};
+	visit(root);
+	return out;
 }
 //#endregion
 //#region entrypoints/playground/main.ts
@@ -192,7 +236,7 @@ async function run() {
 			}, 450);
 			continue;
 		}
-		const result = await browser.runtime.sendMessage({
+		const result = await sendRuntimeMessage({
 			type: "JUDGE_TWEET",
 			tweet: {
 				id: tweet.id,

@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { callJev, parseChoiceAnswer, SLOP_CHOICE, TYPESAFE_URL } from '../lib/jev';
 import { createLimiter } from '../lib/queue';
 import { mergeSettings } from '../lib/settings';
-import { looksPromotedLabel, tweetIdFromHref } from '../lib/tweet';
+import { looksPromotedLabel, isRetweetContext, tweetIdFromHref } from '../lib/tweet';
+import { isXUrl } from '../lib/chrome-msg';
 import { badgeCopy, percent, shouldStamp } from '../lib/verdict';
 
 test('tweetIdFromHref reads /status/:id', () => {
@@ -14,6 +15,22 @@ test('tweetIdFromHref reads /status/:id', () => {
 test('skips Promoted labels', () => {
   assert.equal(looksPromotedLabel('Promoted'), true);
   assert.equal(looksPromotedLabel('Reply'), false);
+});
+
+test('retweet socialContext matches English and Spanish X copy', () => {
+  assert.equal(isRetweetContext('Daniel repostó'), true);
+  assert.equal(isRetweetContext('Ada reposteó'), true);
+  assert.equal(isRetweetContext('Ada reposted'), true);
+  assert.equal(isRetweetContext('Ada retweeted'), true);
+  assert.equal(isRetweetContext('Maya ha retwitteado'), true);
+  assert.equal(isRetweetContext('liked this'), false);
+});
+
+test('isXUrl only matches https X/Twitter hosts', () => {
+  assert.equal(isXUrl('https://x.com/home'), true);
+  assert.equal(isXUrl('https://twitter.com/i/status/1'), true);
+  assert.equal(isXUrl('https://www.linkedin.com/feed/'), false);
+  assert.equal(isXUrl('chrome://extensions'), false);
 });
 
 test('choice question is not_slop vs slop', () => {

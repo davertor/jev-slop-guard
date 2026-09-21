@@ -109,6 +109,47 @@ button:hover {
   width: auto;
 }
 
+button.pause-toggle {
+  width: auto;
+  min-width: 88px;
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+button.pause-toggle[data-paused='false'] {
+  background: #e8b44c;
+  border-color: #e8b44c;
+  color: #111;
+}
+
+button.pause-toggle[data-paused='true'] {
+  background: #00ba7c;
+  border-color: #00ba7c;
+  color: #053321;
+}
+
+.x-live {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #12321c;
+  color: #b9f4c8;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.x-live[data-state='missing'] {
+  background: #3a1515;
+  color: #ffd0d0;
+}
+
+.x-live[data-state='idle'] {
+  background: #171b20;
+  color: #9ba1a9;
+  font-weight: 500;
+}
+
 .banner {
   margin: 0;
   padding: 8px 10px;

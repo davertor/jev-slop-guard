@@ -129,23 +129,6 @@
 		return String(Math.abs(h));
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
-	/**
-	* Contains the `browser` export which you should use to access the extension
-	* APIs in your project:
-	*
-	* ```ts
-	* import { browser } from 'wxt/browser';
-	*
-	* browser.runtime.onInstalled.addListener(() => {
-	*   // ...
-	* });
-	* ```
-	*
-	* @module wxt/browser
-	*/
-	var browser = globalThis.browser?.runtime?.id ? globalThis.browser : globalThis.chrome;
-	//#endregion
 	//#region lib/verdict.ts
 	function percent(p) {
 		return Math.round(Math.min(1, Math.max(0, p)) * 100);
@@ -209,9 +192,13 @@
 		if (!row) {
 			row = document.createElement("div");
 			row.className = ROW_CLASS;
-			const tweetText = [...article.querySelectorAll("[data-testid=\"tweetText\"]")].find((node) => node instanceof HTMLElement && node.closest("article[data-testid=\"tweet\"]") === article);
-			if (tweetText?.parentElement) tweetText.parentElement.insertBefore(row, tweetText.nextSibling);
-			else article.append(row);
+			const tweetText = [...article.querySelectorAll("[data-testid=\"tweetText\"]")].find((node) => node instanceof HTMLElement && (node.closest("article[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]")) === article);
+			if (tweetText) tweetText.insertAdjacentElement("afterend", row);
+			else {
+				const media = article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"card.wrapper\"]");
+				if (media) media.insertAdjacentElement("beforebegin", row);
+				else article.append(row);
+			}
 		}
 		let badge = row.querySelector(`.${BADGE_CLASS}`);
 		if (!badge) {
@@ -265,6 +252,24 @@
 		article.querySelector(`.${OVERLAY_CLASS}`)?.remove();
 	}
 	//#endregion
+	//#region lib/chrome-msg.ts
+	function chromeApi() {
+		const root = globalThis;
+		const api = root.chrome?.runtime ? root.chrome : root.browser;
+		if (!api?.runtime) throw new Error("chrome extension API unavailable");
+		return api;
+	}
+	function sendRuntimeMessage(message) {
+		return new Promise((resolve, reject) => {
+			const api = chromeApi();
+			api.runtime.sendMessage(message, (response) => {
+				const err = api.runtime.lastError;
+				if (err) reject(new Error(err.message));
+				else resolve(response);
+			});
+		});
+	}
+	//#endregion
 	//#region lib/queue.ts
 	function debounce(fn, ms) {
 		let timer;
@@ -273,6 +278,23 @@
 			timer = setTimeout(fn, ms);
 		};
 	}
+	//#endregion
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
+	/**
+	* Contains the `browser` export which you should use to access the extension
+	* APIs in your project:
+	*
+	* ```ts
+	* import { browser } from 'wxt/browser';
+	*
+	* browser.runtime.onInstalled.addListener(() => {
+	*   // ...
+	* });
+	* ```
+	*
+	* @module wxt/browser
+	*/
+	var browser = globalThis.browser?.runtime?.id ? globalThis.browser : globalThis.chrome;
 	//#endregion
 	//#region lib/settings.ts
 	var SETTINGS_KEY = "slopGuard.settings.v1";
@@ -341,7 +363,7 @@
 			},
 			putBack(id, article) {
 				undoneIds.add(id);
-				browser.storage.session.set({ [adapter.undoKey]: [...undoneIds] });
+				chromeApi().storage.session.set({ [adapter.undoKey]: [...undoneIds] });
 				clearStamp(article);
 			},
 			async judge(article) {
@@ -354,7 +376,7 @@
 				article.dataset.slopPendingAt = String(Date.now());
 				markPending(article);
 				try {
-					const result = await browser.runtime.sendMessage({
+					const result = await sendRuntimeMessage({
 						type: "JUDGE_TWEET",
 						tweet: {
 							id: item.id,
@@ -434,7 +456,7 @@
 		const mutationObserver = new MutationObserver((mutations) => {
 			for (const mutation of mutations) {
 				const target = mutation.target;
-				if (target instanceof Element && target.closest?.(".slop-guard-row, .slop-guard-overlay, .slop-guard-modelbar, .slop-guard-banner, .slop-guard-liprobe")) continue;
+				if (target instanceof Element && target.closest?.(".slop-guard-row, .slop-guard-overlay, .slop-guard-modelbar, .slop-guard-banner, .slop-guard-liprobe, .slop-guard-xprobe")) continue;
 				scheduleScan();
 				return;
 			}
@@ -454,7 +476,7 @@
 			for (const id of ids) undoneIds.add(id);
 			slopFeed.scan();
 		});
-		browser.storage.onChanged.addListener((changes, area) => {
+		chromeApi().storage.onChanged.addListener((changes, area) => {
 			if (area !== "local" || !changes["slopGuard.settings.v1"]) return;
 			loadSettings().then((loaded) => {
 				settings = loaded;
@@ -475,7 +497,7 @@
 		});
 	}
 	async function loadUndoneIds(key) {
-		const bag = await browser.storage.session.get(key);
+		const bag = await chromeApi().storage.session.get(key);
 		return Array.isArray(bag[key]) ? bag[key].filter((id) => typeof id === "string") : [];
 	}
 	function isInViewport(el) {
@@ -777,7 +799,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/linkedin-feed.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/workspace/entrypoints/linkedin-feed.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

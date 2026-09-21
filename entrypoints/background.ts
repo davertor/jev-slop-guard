@@ -1,13 +1,17 @@
 import { callJev } from '../lib/jev';
+import { chromeApi } from '../lib/chrome-msg';
 import {
+  isInjectXMessage,
   isJudgeTweetMessage,
   type ExtensionMessage,
+  type InjectXResult,
   type JudgeResult,
   type SettingsResult,
 } from '../lib/messages';
 import { createLimiter } from '../lib/queue';
 import { loadSettings } from '../lib/settings';
 import type { Verdict } from '../lib/verdict';
+import { ensureXTimeline, watchXTabs } from '../lib/x-inject';
 
 const CACHE_KEY = 'slopGuard.cache.v2';
 const CACHE_LIMIT = 400;
@@ -17,21 +21,52 @@ const inflight = new Map<string, Promise<JudgeResult>>();
 
 export default defineBackground(() => {
   void hydrateCache();
+  watchXTabs();
 
-  browser.runtime.onMessage.addListener((message: ExtensionMessage) => {
-    if (message.type === 'PING') return Promise.resolve({ ok: true });
-    if (message.type === 'GET_SETTINGS') {
-      return loadSettings().then((settings): SettingsResult => ({ ok: true, settings }));
+  chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    const msg = message as ExtensionMessage;
+    if (msg.type === 'PING') {
+      sendResponse({ ok: true });
+      return;
     }
-    if (isJudgeTweetMessage(message)) {
-      return judge(message.tweet);
+    if (msg.type === 'GET_SETTINGS') {
+      loadSettings()
+        .then((settings): SettingsResult => ({ ok: true, settings }))
+        .then(sendResponse)
+        .catch((err: unknown) => {
+          sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
+        });
+      return true;
+    }
+    if (isJudgeTweetMessage(msg)) {
+      judge(msg.tweet)
+        .then(sendResponse)
+        .catch((err: unknown) => {
+          const error = err instanceof Error ? err.message : 'Jev request failed';
+          sendResponse({ ok: false, code: 'JEV', error } satisfies JudgeResult);
+        });
+      return true;
+    }
+    if (isInjectXMessage(msg)) {
+      ensureXTimeline(msg.tabId)
+        .then((result) => {
+          const reply: InjectXResult = result.ok ? { ok: true } : { ok: false, error: result.error };
+          sendResponse(reply);
+        })
+        .catch((err: unknown) => {
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          } satisfies InjectXResult);
+        });
+      return true;
     }
     return undefined;
   });
 });
 
 async function hydrateCache(): Promise<void> {
-  const bag = await browser.storage.session.get(CACHE_KEY);
+  const bag = await chromeApi().storage.session.get(CACHE_KEY);
   const raw = bag[CACHE_KEY];
   if (!raw || typeof raw !== 'object') return;
   for (const [id, verdict] of Object.entries(raw as Record<string, Verdict>)) {
@@ -42,7 +77,7 @@ async function hydrateCache(): Promise<void> {
 async function persistCache(): Promise<void> {
   const dump: Record<string, Verdict> = {};
   for (const [id, verdict] of memory) dump[id] = verdict;
-  await browser.storage.session.set({ [CACHE_KEY]: dump });
+  await chromeApi().storage.session.set({ [CACHE_KEY]: dump });
 }
 
 function remember(verdict: Verdict): void {
