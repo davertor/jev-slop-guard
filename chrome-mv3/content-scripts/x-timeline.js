@@ -10,9 +10,13 @@
 	var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 	var SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 	var MIN_TEXT = 4;
-	var MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.wrapper\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.layoutLarge.media\"], [data-testid=\"card.layoutSmall.media\"]";
+	var HARD_MEDIA_CHROME = "[data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"tweetPhoto\"], [data-testid=\"card.layoutLarge.media\"], [data-testid=\"card.layoutSmall.media\"]";
+	var SOFT_MEDIA_CHROME = "[data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]";
+	var MEDIA_CHROME = `${HARD_MEDIA_CHROME}, ${SOFT_MEDIA_CHROME}`;
 	var PLAYER_OVERLAY_RE = /^(Original|AI|GIF|Play|Pause|Video|Live)$/i;
 	var CAPTION_SEL = "div[lang], span[lang], div[dir=\"auto\"], span[dir=\"auto\"]";
+	var WHO_TO_FOLLOW_RE = /who\s+to\s+follow|a\s+qui[eé]n\s+seguir/i;
+	var FOLLOW_CTA_RE = /^(Follow|Seguir|Following|Siguiendo)$/i;
 	function tweetIdFromHref(href) {
 		return href.match(STATUS_RE)?.[1] ?? null;
 	}
@@ -21,6 +25,11 @@
 	}
 	/** Why extract failed — probe / console.debug. Reasons stay short. */
 	function explainExtract(article) {
+		if (isWhoToFollowItem(article)) return {
+			ok: false,
+			reason: "who-to-follow",
+			item: null
+		};
 		if (isPromoted(article)) return {
 			ok: false,
 			reason: "promoted",
@@ -52,6 +61,7 @@
 	*/
 	function listTweetArticles(root = document) {
 		return uniqueElements([...queryDeep(root, "[data-testid=\"tweet\"]"), ...articlesFromCells(root)]).filter((article) => {
+			if (isWhoToFollowItem(article)) return false;
 			if (isMediaHusk(article)) return false;
 			const nested = nestedTweetCards(article).filter((card) => !isMediaHusk(card));
 			if (nested.length === 0) return true;
@@ -289,12 +299,39 @@
 		return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t) && !PLAYER_OVERLAY_RE.test(t);
 	}
 	function inMediaChrome(node) {
-		if (node.closest(MEDIA_CHROME)) return true;
+		if (node.closest(HARD_MEDIA_CHROME)) return true;
+		if (node.closest(SOFT_MEDIA_CHROME) && !isSoftChromeCaption(node)) return true;
 		let root = node.getRootNode();
 		while (root.host instanceof Element) {
-			if (root.host.matches(MEDIA_CHROME) || root.host.closest(MEDIA_CHROME)) return true;
+			if (root.host.matches(HARD_MEDIA_CHROME) || root.host.closest(HARD_MEDIA_CHROME)) return true;
+			if ((root.host.matches(SOFT_MEDIA_CHROME) || root.host.closest(SOFT_MEDIA_CHROME)) && !isSoftChromeCaption(node)) return true;
 			root = root.host.getRootNode();
 		}
+		return false;
+	}
+	function isSoftChromeCaption(node) {
+		if (!usableText(node.textContent)) return false;
+		return node.getAttribute("data-testid") === "tweetText" || node.matches(CAPTION_SEL);
+	}
+	/** Sidebar / inline “Who to follow” — UserCell, aside heading, Follow/Seguir cells. Not timeline articles. */
+	function isWhoToFollowItem(el) {
+		if (el.getAttribute("data-testid") === "tweet" && !isMediaHusk(el)) return false;
+		if (realTweetCards(el).length > 0) return false;
+		if (el.closest("[data-testid=\"UserCell\"]") || el.querySelector("[data-testid=\"UserCell\"]")) return true;
+		if (el.querySelector("[data-testid=\"User-Name\"]") && hasFollowCta(el)) return true;
+		const aside = el.closest("aside");
+		if (aside && WHO_TO_FOLLOW_RE.test(aside.textContent ?? "")) return true;
+		let node = el;
+		for (let i = 0; i < 6 && node; i += 1) {
+			const heading = node.querySelector("h1, h2, [role=\"heading\"]");
+			if (heading && WHO_TO_FOLLOW_RE.test(cleanText(heading.textContent)) && realTweetCards(node).length === 0) return true;
+			node = node.parentElement;
+		}
+		return false;
+	}
+	function hasFollowCta(el) {
+		if (el.querySelector("[data-testid=\"follow\"]")) return true;
+		for (const btn of el.querySelectorAll("button, [role=\"button\"]")) if (FOLLOW_CTA_RE.test(cleanText(btn.textContent))) return true;
 		return false;
 	}
 	function isDurationTime(el) {
@@ -317,6 +354,7 @@
 	function articlesFromCells(root) {
 		const out = [];
 		for (const cell of queryDeep(root, "[data-testid=\"cellInnerDiv\"]")) {
+			if (isWhoToFollowItem(cell)) continue;
 			const real = realTweetCards(cell);
 			if (real.length > 0) {
 				out.push(...real);
