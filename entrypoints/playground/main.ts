@@ -32,14 +32,26 @@ const FIXTURES = [
     name: 'Ibrahim',
     text: 'We shipped the retry queue last night. If you were seeing duplicate webhooks around 02:10 UTC, that was us; should be clean now.',
   },
+  {
+    id: '1005',
+    handle: 'samu2kdotcom',
+    name: 'Samu 2k',
+    text: 'si gastas menos de 1200M de tokens mensuales te sale mas a cuenta OpenRouter que nan.builders.',
+    repostedBy: 'Joaquin Montesinos',
+  },
 ];
 
 const feed = document.querySelector('#feed')!;
 const note = document.querySelector('#note')!;
 
-feed.innerHTML = FIXTURES.map(
-  (tweet) => `
+feed.innerHTML = FIXTURES.map((tweet) => {
+  const social =
+    'repostedBy' in tweet && tweet.repostedBy
+      ? `<div data-testid="socialContext">${escapeHtml(tweet.repostedBy)} repostó</div>`
+      : '';
+  return `
   <article data-testid="tweet" data-slop-id="${tweet.id}">
+    ${social}
     <div data-testid="User-Name">
       <strong>${tweet.name}</strong>
       <a href="/${tweet.handle}">@${tweet.handle}</a>
@@ -47,8 +59,8 @@ feed.innerHTML = FIXTURES.map(
     <a href="/${tweet.handle}/status/${tweet.id}"><time datetime="2026-09-21">${tweet.id}</time></a>
     <div data-testid="tweetText">${escapeHtml(tweet.text)}</div>
   </article>
-`,
-).join('');
+`;
+}).join('');
 
 void run();
 

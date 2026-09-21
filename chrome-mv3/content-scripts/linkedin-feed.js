@@ -1,5 +1,5 @@
 (function() {
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/utils/define-content-script.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/define-content-script.mjs
 	function defineContentScript(definition) {
 		return definition;
 	}
@@ -129,6 +129,44 @@
 		return String(Math.abs(h));
 	}
 	//#endregion
+	//#region lib/tweet.ts
+	/** Own tweetText first; retweet shells fall back to the nested original. */
+	function findTweetTextEl(article) {
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article)) return node;
+		for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) return node;
+		return null;
+	}
+	function findActionBar(article) {
+		for (const testid of [
+			"reply",
+			"retweet",
+			"like"
+		]) for (const el of queryDeep(article, `[data-testid="${testid}"]`)) {
+			if (!belongsToArticle(el, article)) continue;
+			const group = el.closest("[role=\"group\"]");
+			if (group instanceof HTMLElement && belongsToArticle(group, article)) return group;
+			return el;
+		}
+		return null;
+	}
+	function belongsToArticle(node, article) {
+		return tweetCardOwner(node) === article;
+	}
+	function tweetCardOwner(node) {
+		const owner = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
+		return owner instanceof HTMLElement ? owner : null;
+	}
+	/** querySelectorAll plus shadow roots (X sometimes wraps cells). */
+	function queryDeep(root, selector) {
+		const out = [];
+		const visit = (node) => {
+			for (const el of node.querySelectorAll(selector)) if (el instanceof HTMLElement) out.push(el);
+			for (const el of node.querySelectorAll("*")) if (el instanceof HTMLElement && el.shadowRoot) visit(el.shadowRoot);
+		};
+		visit(root);
+		return out;
+	}
+	//#endregion
 	//#region lib/verdict.ts
 	function percent(p) {
 		return Math.round(Math.min(1, Math.max(0, p)) * 100);
@@ -187,18 +225,44 @@
 			model: article.dataset.slopModel ?? "jev-latest"
 		}, settings, opts);
 	}
+	function ownSlopRow(article) {
+		for (const row of article.querySelectorAll(`.${ROW_CLASS}`)) if (row instanceof HTMLElement && belongsToArticle(row, article)) return row;
+		return null;
+	}
+	function ownOverlay(article) {
+		for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
+		return null;
+	}
+	function insertBadgeRow(article, row) {
+		const tweetText = findTweetTextEl(article);
+		if (tweetText && belongsToArticle(tweetText, article)) {
+			tweetText.insertAdjacentElement("afterend", row);
+			return;
+		}
+		const actions = findActionBar(article);
+		if (actions) {
+			actions.insertAdjacentElement("beforebegin", row);
+			return;
+		}
+		const nested = queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article);
+		if (nested) {
+			nested.insertAdjacentElement("afterend", row);
+			return;
+		}
+		if (tweetText) {
+			tweetText.insertAdjacentElement("afterend", row);
+			return;
+		}
+		const media = article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"card.wrapper\"]");
+		if (media) media.insertAdjacentElement("beforebegin", row);
+		else article.append(row);
+	}
 	function upsertBadge(article, text, tone, dot) {
-		let row = article.querySelector(`.${ROW_CLASS}`);
+		let row = ownSlopRow(article);
 		if (!row) {
 			row = document.createElement("div");
 			row.className = ROW_CLASS;
-			const tweetText = [...article.querySelectorAll("[data-testid=\"tweetText\"]")].find((node) => node instanceof HTMLElement && (node.closest("article[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]")) === article);
-			if (tweetText) tweetText.insertAdjacentElement("afterend", row);
-			else {
-				const media = article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"card.wrapper\"]");
-				if (media) media.insertAdjacentElement("beforebegin", row);
-				else article.append(row);
-			}
+			insertBadgeRow(article, row);
 		}
 		let badge = row.querySelector(`.${BADGE_CLASS}`);
 		if (!badge) {
@@ -223,7 +287,7 @@
 	}
 	function stampArticle(article, onPutBack) {
 		article.classList.add("slop-guard-stamped");
-		let overlay = article.querySelector(`.${OVERLAY_CLASS}`);
+		let overlay = ownOverlay(article);
 		if (!overlay) {
 			overlay = document.createElement("div");
 			overlay.className = OVERLAY_CLASS;
@@ -245,11 +309,11 @@
 		};
 	}
 	function clearBadge(article) {
-		article.querySelector(`.${ROW_CLASS}`)?.remove();
+		ownSlopRow(article)?.remove();
 	}
 	function clearStamp(article) {
 		article.classList.remove("slop-guard-stamped");
-		article.querySelector(`.${OVERLAY_CLASS}`)?.remove();
+		ownOverlay(article)?.remove();
 	}
 	//#endregion
 	//#region lib/chrome-msg.ts
@@ -279,7 +343,7 @@
 		};
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/browser.mjs
 	/**
 	* Contains the `browser` export which you should use to access the extension
 	* APIs in your project:
@@ -338,7 +402,7 @@
 				article.removeAttribute("data-slop-guard");
 				delete article.dataset.slopId;
 				delete article.dataset.slopPendingAt;
-				article.querySelector(".slop-guard-row")?.remove();
+				ownSlopRow(article)?.remove();
 				clearStamp(article);
 			},
 			shouldJudge(article) {
@@ -359,7 +423,12 @@
 				if (state === "pending") {
 					const started = Number(article.dataset.slopPendingAt ?? 0);
 					if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) slopFeed.reset(article);
+					return;
 				}
+				if (state === "done" && !ownSlopRow(article)) reapplyFromDataset(article, settings, {
+					undone: undoneIds.has(article.dataset.slopId ?? ""),
+					onPutBack: slopFeed.putBack
+				});
 			},
 			putBack(id, article) {
 				undoneIds.add(id);
@@ -413,18 +482,18 @@
 						return;
 					}
 					markError(article, "jev error");
-					const badge = article.querySelector(".slop-guard-badge");
+					const badge = ownSlopRow(article)?.querySelector(".slop-guard-badge");
 					if (badge instanceof HTMLElement) badge.title = result.error;
 				} catch (err) {
 					if (ctx.isInvalid) return;
 					slopFeed.reset(article);
 					markError(article, "retry");
-					const badge = article.querySelector(".slop-guard-badge");
+					const badge = ownSlopRow(article)?.querySelector(".slop-guard-badge");
 					if (badge instanceof HTMLElement) badge.title = err instanceof Error ? err.message : "Message failed";
 					window.setTimeout(() => {
 						if (article.getAttribute("data-slop-guard") === "error") {
 							article.removeAttribute("data-slop-guard");
-							article.querySelector(".slop-guard-row")?.remove();
+							ownSlopRow(article)?.remove();
 						}
 					}, 2500);
 				} finally {
@@ -555,7 +624,7 @@
 		bar.textContent = `Slop Guard LI · cards ${cards.length} · ready ${extractable}`;
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/utils/internal/logger.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/internal/logger.mjs
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger$1 = {
 		debug: (...args) => ([...args], void 0),
@@ -564,7 +633,7 @@
 		error: (...args) => ([...args], void 0)
 	};
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/utils/internal/custom-events.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/internal/custom-events.mjs
 	var WxtLocationChangeEvent = class WxtLocationChangeEvent extends Event {
 		static EVENT_NAME = getUniqueEventName("wxt:locationchange");
 		constructor(newUrl, oldUrl) {
@@ -581,7 +650,7 @@
 		return `${browser?.runtime?.id}:linkedin-feed:${eventName}`;
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/utils/internal/location-watcher.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/internal/location-watcher.mjs
 	var supportsNavigationApi = typeof globalThis.navigation?.addEventListener === "function";
 	/**
 	* Create a util that watches for URL changes, dispatching the custom event when
@@ -611,7 +680,7 @@
 		} };
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/utils/content-script-context.mjs
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/content-script-context.mjs
 	/**
 	* Implements
 	* [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).
