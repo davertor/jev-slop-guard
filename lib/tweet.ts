@@ -68,13 +68,21 @@ export function listTweetArticles(root: ParentNode = document): HTMLElement[] {
   });
 }
 
+/**
+ * Real ads only. Do NOT treat `placementTracking` alone as promoted — X often
+ * puts that on organic timeline cards (probe showed 6/7 "promoted" false positives).
+ */
 export function isPromoted(article: HTMLElement): boolean {
-  if (article.querySelector('[data-testid="placementTracking"], [data-testid="promotedIndicator"]')) {
-    return true;
-  }
+  if (article.querySelector('[data-testid="promotedIndicator"]')) return true;
   for (const el of article.querySelectorAll('span')) {
     const text = el.textContent?.trim();
-    if (text === 'Promoted' || text === 'Promoted by' || text === 'Promocionado') return true;
+    if (looksPromotedLabel(text ?? '')) return true;
+  }
+  // placementTracking only counts when paired with an explicit Promoted label nearby.
+  const tracking = article.querySelector('[data-testid="placementTracking"]');
+  if (tracking) {
+    const blob = (tracking.textContent ?? '') + ' ' + (tracking.parentElement?.textContent ?? '');
+    if (/\bPromoted\b|\bPromocionado\b/i.test(blob)) return true;
   }
   return false;
 }
