@@ -1,19 +1,32 @@
-# Slop Guard
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
+    <img src="docs/hero-light.png" width="900" alt="jev-slop-detector: stands between you and the slop on X and LinkedIn. Chrome extension, judged by Jev.">
+  </picture>
+</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.21-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.21">
+  <img src="https://img.shields.io/badge/version-0.1.23-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.23">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-57503f?style=flat-square&labelColor=191511" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/chrome-manifest%20v3-57503f?style=flat-square&labelColor=191511" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/sites-x.com%20%C2%B7%20linkedin.com-57503f?style=flat-square&labelColor=191511" alt="Works on x.com and linkedin.com">
 </p>
 
-**A Chrome extension that labels AI slop on your X and LinkedIn feeds as you scroll.**
+**A Chrome extension that stands between you and the slop on X and LinkedIn.**
 
 Every post gets a small pill with a slop probability. Posts over your threshold
 get blurred and stamped **SLOP**, with a button to show them anyway. The verdict
 comes from [Jev](https://typesafe.ai), TypeSafe's System One model: one typed
 `{ slop, not_slop }` choice per post, no free-form LLM text, and you bring your
-own API key.
+own API key. It installs as **Slop Guard**.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/badges-dark.png">
+    <img src="docs/badges-light.png" width="900" alt="Three sample posts: a green Slop 8% pill under a substantive post, a red Stop 74% pill under an empty announcement, and a blurred post stamped SLOP with a Show the post button.">
+  </picture>
+  <br><sub>Under the threshold, over it, and stamped. Sample posts, threshold at 70%.</sub>
+</p>
 
 <p align="center">
   <a href="#what-it-does">What it does</a> ·
