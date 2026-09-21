@@ -68,8 +68,15 @@ export function reapplyFromDataset(
 }
 
 export function ownSlopRow(article: HTMLElement): HTMLElement | null {
+  // X: row must belong to this tweet article. LinkedIn: no data-testid=tweet —
+  // belongsToArticle is always false there, which used to create a new row every
+  // reconcile and stack badges under one post.
   for (const row of article.querySelectorAll(`.${ROW_CLASS}`)) {
-    if (row instanceof HTMLElement && belongsToArticle(row, article)) return row;
+    if (!(row instanceof HTMLElement)) continue;
+    if (belongsToArticle(row, article)) return row;
+    const nestedOwner = row.parentElement?.closest('[data-slop-guard]');
+    if (nestedOwner && nestedOwner !== article) continue;
+    if (article.contains(row) && !row.closest('[data-testid="tweet"]')) return row;
   }
   return null;
 }
@@ -103,6 +110,19 @@ function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
     '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="previewInterstitial"], [data-testid="card.wrapper"]',
   );
   if (place(media, 'beforebegin')) return;
+
+  // LinkedIn: sit above the social action bar / counts, not after every nested node.
+  const liAction =
+    article.querySelector(
+      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, .feed-shared-social-counts',
+    ) ?? null;
+  if (liAction && place(liAction, 'beforebegin')) return;
+  const liText =
+    article.querySelector(
+      '.feed-shared-update-v2__commentary, .update-components-text, .feed-shared-inline-show-more-text',
+    ) ?? null;
+  if (liText && place(liText, 'afterend')) return;
+
   article.append(row);
 }
 

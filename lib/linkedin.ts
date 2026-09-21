@@ -9,14 +9,13 @@ export type ExtractedLinkedInPost = {
 const PRIMARY_CARD_SELECTORS = [
   'div.feed-shared-update-v2[data-urn]',
   'div.feed-shared-update-v2[data-id]',
-  'div.feed-shared-update-v2',
-  'div.occludable-update',
   'div[data-id^="urn:li:activity"]',
   'div[data-urn^="urn:li:activity"]',
   'div[data-urn^="urn:li:ugcPost"]',
   'div[data-urn^="urn:li:share"]',
   'div[data-urn^="urn:li:aggregatedShare"]',
-  'div[role="article"]',
+  'div.feed-shared-update-v2',
+  'div.occludable-update',
 ];
 
 const FEED_ROW_SELECTORS = [
@@ -48,12 +47,17 @@ const ACTOR_SELECTORS = [
 export function listLinkedInArticles(root: ParentNode = document): HTMLElement[] {
   const primary = queryAll(root, PRIMARY_CARD_SELECTORS);
   const cards = primary.length > 0 ? primary : queryAll(root, FEED_ROW_SELECTORS);
-  const outer = dropNested(cards);
-  // Drop absurdly large wrappers (whole feed) — keep post-sized nodes.
+  const outer = dropNested(cards).filter((el) => {
+    // One visual post: skip carousel tiles / nested update wrappers without their own urn.
+    if (el.closest('.feed-shared-update-v2[data-urn], div[data-urn^="urn:li:activity"]') &&
+        el.closest('.feed-shared-update-v2[data-urn], div[data-urn^="urn:li:activity"]') !== el) {
+      return false;
+    }
+    return true;
+  });
   return outer.filter((el) => {
     const rectH = el.getBoundingClientRect().height;
     const h = rectH > 0 ? rectH : (el as HTMLElement).offsetHeight || 0;
-    // height 0 (tests / not laid out yet): keep; otherwise post-sized only
     if (h === 0) return true;
     return h > 80 && h < Math.max(window.innerHeight, 600) * 2.5;
   });

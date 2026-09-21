@@ -27,14 +27,13 @@
 	var PRIMARY_CARD_SELECTORS = [
 		"div.feed-shared-update-v2[data-urn]",
 		"div.feed-shared-update-v2[data-id]",
-		"div.feed-shared-update-v2",
-		"div.occludable-update",
 		"div[data-id^=\"urn:li:activity\"]",
 		"div[data-urn^=\"urn:li:activity\"]",
 		"div[data-urn^=\"urn:li:ugcPost\"]",
 		"div[data-urn^=\"urn:li:share\"]",
 		"div[data-urn^=\"urn:li:aggregatedShare\"]",
-		"div[role=\"article\"]"
+		"div.feed-shared-update-v2",
+		"div.occludable-update"
 	];
 	var FEED_ROW_SELECTORS = [
 		"div[componentkey*=\"FeedType_MAIN_FEED\"]",
@@ -62,6 +61,9 @@
 	function listLinkedInArticles(root = document) {
 		const primary = queryAll(root, PRIMARY_CARD_SELECTORS);
 		return dropNested(primary.length > 0 ? primary : queryAll(root, FEED_ROW_SELECTORS)).filter((el) => {
+			if (el.closest(".feed-shared-update-v2[data-urn], div[data-urn^=\"urn:li:activity\"]") && el.closest(".feed-shared-update-v2[data-urn], div[data-urn^=\"urn:li:activity\"]") !== el) return false;
+			return true;
+		}).filter((el) => {
 			const rectH = el.getBoundingClientRect().height;
 			const h = rectH > 0 ? rectH : el.offsetHeight || 0;
 			if (h === 0) return true;
@@ -345,7 +347,13 @@
 		}, settings, opts);
 	}
 	function ownSlopRow(article) {
-		for (const row of article.querySelectorAll(`.${ROW_CLASS}`)) if (row instanceof HTMLElement && belongsToArticle(row, article)) return row;
+		for (const row of article.querySelectorAll(`.${ROW_CLASS}`)) {
+			if (!(row instanceof HTMLElement)) continue;
+			if (belongsToArticle(row, article)) return row;
+			const nestedOwner = row.parentElement?.closest("[data-slop-guard]");
+			if (nestedOwner && nestedOwner !== article) continue;
+			if (article.contains(row) && !row.closest("[data-testid=\"tweet\"]")) return row;
+		}
 		return null;
 	}
 	function ownOverlay(article) {
@@ -365,6 +373,10 @@
 		if (place(findActionBar(article), "beforebegin")) return;
 		if (place(queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article && !inMediaChrome(node)) ?? null, "afterend")) return;
 		if (place(article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]"), "beforebegin")) return;
+		const liAction = article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, .feed-shared-social-counts") ?? null;
+		if (liAction && place(liAction, "beforebegin")) return;
+		const liText = article.querySelector(".feed-shared-update-v2__commentary, .update-components-text, .feed-shared-inline-show-more-text") ?? null;
+		if (liText && place(liText, "afterend")) return;
 		article.append(row);
 	}
 	function upsertBadge(article, text, tone, dot) {
