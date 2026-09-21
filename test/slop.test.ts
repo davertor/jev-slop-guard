@@ -3,9 +3,10 @@ import { test } from 'node:test';
 import { callJev, parseChoiceAnswer, SLOP_CHOICE, TYPESAFE_URL } from '../lib/jev';
 import { createLimiter } from '../lib/queue';
 import { mergeSettings } from '../lib/settings';
+import { SETTINGS_FORM_HTML } from '../lib/settings-ui';
 import { looksPromotedLabel, isRetweetContext, tweetIdFromHref } from '../lib/tweet';
 import { isXUrl } from '../lib/chrome-msg';
-import { badgeCopy, percent, shouldStamp } from '../lib/verdict';
+import { badgeCopy, overThreshold, percent, shouldStamp } from '../lib/verdict';
 
 test('tweetIdFromHref reads /status/:id', () => {
   assert.equal(tweetIdFromHref('/maya/status/1002?s=20'), '1002');
@@ -41,7 +42,7 @@ test('choice question is not_slop vs slop', () => {
   assert.ok('not_slop' in SLOP_CHOICE.criteria);
 });
 
-test('parseChoiceAnswer uses probabilities for Stop / Not slop percents', () => {
+test('parseChoiceAnswer uses slopP for Stop / Slop percents', () => {
   const slop = parseChoiceAnswer('1', 'jev-1.13.0', {
     type: 'choice',
     choice: 'slop',
@@ -50,7 +51,7 @@ test('parseChoiceAnswer uses probabilities for Stop / Not slop percents', () => 
   });
   assert.equal(slop.label, 'slop');
   assert.equal(shouldStamp(slop, 0.7, true), true);
-  assert.deepEqual(badgeCopy(slop, true), { tone: 'stop', text: 'Stop | 91%' });
+  assert.deepEqual(badgeCopy(slop, 0.7), { tone: 'stop', text: 'Stop | 91%' });
 
   const human = parseChoiceAnswer('2', 'jev-latest', {
     type: 'choice',
@@ -59,17 +60,22 @@ test('parseChoiceAnswer uses probabilities for Stop / Not slop percents', () => 
     probabilities: { slop: 0.14, not_slop: 0.86 },
   });
   assert.equal(shouldStamp(human, 0.7, true), false);
-  assert.deepEqual(badgeCopy(human, false), { tone: 'ok', text: 'Not slop | 86%' });
+  assert.deepEqual(badgeCopy(human, 0.7), { tone: 'ok', text: 'Slop | 14%' });
+  assert.equal(badgeCopy(human, 0.7).text.includes('86'), false);
 });
 
-test('threshold gates the stamp', () => {
+test('threshold gates stamp and badge tone from slopP only', () => {
   const verdict = parseChoiceAnswer('3', 'jev-latest', {
     choice: 'slop',
     probabilities: { slop: 0.62, not_slop: 0.38 },
   });
+  assert.equal(overThreshold(verdict, 0.7), false);
+  assert.equal(overThreshold(verdict, 0.6), true);
   assert.equal(shouldStamp(verdict, 0.7, true), false);
   assert.equal(shouldStamp(verdict, 0.6, true), true);
   assert.equal(shouldStamp(verdict, 0.6, false), false);
+  assert.deepEqual(badgeCopy(verdict, 0.7), { tone: 'ok', text: 'Slop | 62%' });
+  assert.deepEqual(badgeCopy(verdict, 0.6), { tone: 'stop', text: 'Stop | 62%' });
   assert.equal(percent(0.624), 62);
 });
 
@@ -79,6 +85,11 @@ test('mergeSettings maps legacy noulThreshold onto threshold', () => {
   assert.equal(settings.threshold, 0.88);
   assert.equal(settings.stampEnabled, true);
   assert.equal(settings.apiKey, 'k');
+});
+
+test('settings UI copy talks about under-threshold badges, not Not slop', () => {
+  assert.match(SETTINGS_FORM_HTML, /Show badge when under threshold/);
+  assert.equal(SETTINGS_FORM_HTML.includes('Not slop'), false);
 });
 
 test('limiter caps concurrency', async () => {

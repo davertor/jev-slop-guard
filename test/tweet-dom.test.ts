@@ -10,6 +10,7 @@ Object.assign(globalThis, {
   window,
   document,
   HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Document: window.Document,
   Node: window.Node,
@@ -82,7 +83,7 @@ test('classic retweet: socialContext inside the same article', () => {
   const row = ownSlopRow(cards[0]!);
   assert.ok(row);
   assert.equal(row.previousElementSibling?.getAttribute('data-testid'), 'tweetText');
-  assert.match(row.textContent ?? '', /Not slop/);
+  assert.match(row.textContent ?? '', /Slop \| 2%/);
 });
 
 test('Spanish socialContext verb sits next to the testid name link', () => {
@@ -193,7 +194,36 @@ test('React wipe: done card without a row gets the badge put back', () => {
   reapplyFromDataset(card, DEFAULT_SETTINGS);
   const row = ownSlopRow(card);
   assert.ok(row);
-  assert.match(row.textContent ?? '', /Not slop/);
+  assert.match(row.textContent ?? '', /Slop \| 2%/);
+});
+
+test('under-threshold pill is Slop | slopP, not notP', () => {
+  const root = mount(tweetCard(SAMU));
+  const card = listTweetArticles(root)[0]!;
+  applyVerdict(
+    card,
+    { tweetId: '42', label: 'slop', slopP: 0.57, notP: 0.43, model: 'jev-latest' },
+    DEFAULT_SETTINGS,
+  );
+  const row = ownSlopRow(card);
+  assert.ok(row);
+  assert.match(row.textContent ?? '', /Slop \| 57%/);
+  assert.equal(row.textContent?.includes('43'), false);
+  assert.equal(card.classList.contains('slop-guard-stamped'), false);
+});
+
+test('over-threshold pill is Stop | slopP and stamps', () => {
+  const root = mount(tweetCard(SAMU));
+  const card = listTweetArticles(root)[0]!;
+  applyVerdict(
+    card,
+    { tweetId: '42', label: 'not_slop', slopP: 0.91, notP: 0.09, model: 'jev-latest' },
+    DEFAULT_SETTINGS,
+  );
+  const row = ownSlopRow(card);
+  assert.ok(row);
+  assert.match(row.textContent ?? '', /Stop \| 91%/);
+  assert.equal(card.classList.contains('slop-guard-stamped'), true);
 });
 
 function notSlop(tweetId: string) {
