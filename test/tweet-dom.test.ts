@@ -229,3 +229,174 @@ test('over-threshold pill is Stop | slopP and stamps', () => {
 function notSlop(tweetId: string) {
   return { tweetId, label: 'not_slop' as const, slopP: 0.02, notP: 0.98, model: 'jev-latest' };
 }
+
+function listedIds(root: HTMLElement): string[] {
+  return listTweetArticles(root)
+    .map((card) => extractTweet(card)?.id)
+    .filter((id): id is string => Boolean(id))
+    .sort();
+}
+
+test('GIF card: photo /status/:id/photo/1 still extracts', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/googlegemma">@googlegemma</a></div>
+      <a href="/googlegemma/status/9001"><time>19 sept.</time></a>
+      <div data-testid="tweetText">DiffusionGemma as Jev showcases the power of non-autoregressive architectures.</div>
+      <a href="/googlegemma/status/9001/photo/1" data-testid="tweetPhoto"><img alt="GIF"></a>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.equal(item?.id, '9001');
+  assert.match(item?.text ?? '', /DiffusionGemma/);
+});
+
+test('video card: time is not a link; status id lives on the cell overlay', () => {
+  const root = mount(`
+    <div data-testid="cellInnerDiv">
+      <a href="/monospodcast/status/9002" aria-label="View post"></a>
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><a href="/monospodcast">@monospodcast</a></div>
+        <time>21h</time>
+        <div data-testid="tweetText">Este invento es el fin de beber solo</div>
+        <div data-testid="videoPlayer"><time>0:35</time></div>
+      </article>
+    </div>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.equal(item?.id, '9002');
+  assert.match(item?.text ?? '', /beber solo/);
+  applyVerdict(cards[0]!, notSlop('9002'), DEFAULT_SETTINGS);
+  assert.ok(ownSlopRow(cards[0]!));
+});
+
+test('wrapping status <a> supplies the id when the card has none', () => {
+  const root = mount(`
+    <a href="/atomic_chat_hq/status/9003">
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><a href="/atomic_chat_hq">@atomic_chat_hq</a></div>
+        <time>12 jun.</time>
+        <div data-testid="tweetText">Diffusion Gemma is 4x faster, but makes 6x more mistakes!</div>
+        <div data-testid="videoPlayer"></div>
+      </article>
+    </a>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.equal(item?.id, '9003');
+});
+
+test('media card caption lives in div[lang], not tweetText', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/monospodcast">@monospodcast</a></div>
+      <a href="/monospodcast/status/9004"><time>21h</time></a>
+      <div lang="es">Este invento es el fin de beber solo</div>
+      <div data-testid="videoPlayer"></div>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  const item = extractTweet(cards[0]!);
+  assert.equal(item?.id, '9004');
+  assert.match(item?.text ?? '', /beber solo/);
+  applyVerdict(cards[0]!, notSlop('9004'), DEFAULT_SETTINGS);
+  const row = ownSlopRow(cards[0]!);
+  assert.ok(row);
+  assert.equal(row.previousElementSibling?.getAttribute('lang'), 'es');
+});
+
+test('Mostrar más long tweet still extracts the visible caption', () => {
+  const root = mount(`
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/googlegemma">@googlegemma</a></div>
+      <a href="/googlegemma/status/9005"><time>19 sept.</time></a>
+      <div>
+        <div lang="en">While Jev demonstrated the value of rapid decision models, running DiffusionGemma leverages canvas diffusion.</div>
+        <div data-testid="tweet-text-show-more-link">Mostrar más</div>
+      </div>
+      <div data-testid="tweetPhoto"></div>
+    </article>
+  `);
+  const item = extractTweet(listTweetArticles(root)[0]!);
+  assert.equal(item?.id, '9005');
+  assert.match(item?.text ?? '', /DiffusionGemma/);
+  assert.equal(item?.text.includes('Mostrar más'), false);
+});
+
+test('nested media husk is not listed; parent keeps the badge', () => {
+  const root = mount(`
+    <article data-testid="tweet" id="parent">
+      <div data-testid="User-Name"><a href="/atomic_chat_hq">@atomic_chat_hq</a></div>
+      <a href="/atomic_chat_hq/status/9006"><time>12 jun.</time></a>
+      <div data-testid="tweetText">Diffusion Gemma is 4x faster, but makes 6x more mistakes on a single H100.</div>
+      <div data-testid="tweet" id="husk">
+        <div data-testid="tweetPhoto"></div>
+        <div data-testid="videoPlayer"><time>0:25</time></div>
+      </div>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0]?.id, 'parent');
+  assert.equal(extractTweet(cards[0]!)?.id, '9006');
+  applyVerdict(cards[0]!, notSlop('9006'), DEFAULT_SETTINGS);
+  assert.ok(ownSlopRow(cards[0]!));
+  assert.equal(ownSlopRow(root.querySelector('#husk') as HTMLElement), null);
+});
+
+test('caption inside a media husk still belongs to the parent card', () => {
+  const root = mount(`
+    <article data-testid="tweet" id="parent">
+      <div data-testid="User-Name"><a href="/googlegemma">@googlegemma</a></div>
+      <a href="/googlegemma/status/9007"><time>19 sept.</time></a>
+      <div data-testid="tweet" id="husk">
+        <div data-testid="tweetText">DiffusionGemma as Jev showcases non-autoregressive architectures.</div>
+        <div data-testid="tweetPhoto"></div>
+      </div>
+    </article>
+  `);
+  const cards = listTweetArticles(root);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0]?.id, 'parent');
+  const item = extractTweet(cards[0]!);
+  assert.equal(item?.id, '9007');
+  assert.match(item?.text ?? '', /DiffusionGemma/);
+});
+
+test('cell overlay + lang caption + video husk: listed card is ready', () => {
+  const root = mount(`
+    <div data-testid="cellInnerDiv">
+      <a href="/atomic_chat_hq/status/9008"></a>
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><a href="/atomic_chat_hq">@atomic_chat_hq</a></div>
+        <time>12 jun.</time>
+        <div lang="en">We benchmarked the new diffusion LLM against its autoregressive twin on a single H100.</div>
+        <div data-testid="tweet-text-show-more-link">Mostrar más</div>
+        <div data-testid="tweet">
+          <div data-testid="videoPlayer"><time>0:25</time></div>
+        </div>
+      </article>
+    </div>
+  `);
+  const cards = listTweetArticles(root);
+  const ready = cards.filter((card) => extractTweet(card));
+  assert.equal(cards.length, 1);
+  assert.equal(ready.length, 1);
+  assert.deepEqual(listedIds(root), ['9008']);
+});
+
+test('quote tweet still lists parent commentary and nested original', () => {
+  const root = mount(`
+    <article data-testid="tweet" id="quote">
+      <div data-testid="User-Name"><a href="/ada">@ada</a></div>
+      <a href="/ada/status/77"><time>1h</time></a>
+      <div data-testid="tweetText">this quote commentary is long enough</div>
+      ${tweetCard({ id: '88', handle: 'bob', name: 'Bob', text: 'the quoted original tweet text here' })}
+    </article>
+  `);
+  assert.deepEqual(listedIds(root), ['77', '88']);
+});
