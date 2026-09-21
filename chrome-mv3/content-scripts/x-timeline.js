@@ -474,6 +474,14 @@
 		for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
 		return null;
 	}
+	function isLinkedInCard(article) {
+		return article.hasAttribute("data-urn") || article.hasAttribute("data-id") || article.classList.contains("feed-shared-update-v2") || article.classList.contains("occludable-update") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity");
+	}
+	/** Keep LinkedIn badge pinned as the first child (top of the card). */
+	function placeLinkedInBadge(article, row) {
+		if (article.firstElementChild !== row) article.prepend(row);
+		row.dataset.slopLiPlacement = "top";
+	}
 	function insertBadgeRow(article, row) {
 		const place = (target, where) => {
 			if (!target) return false;
@@ -482,16 +490,16 @@
 			row.remove();
 			return false;
 		};
+		if (isLinkedInCard(article)) {
+			placeLinkedInBadge(article, row);
+			if (!inMediaChrome(row)) return;
+			row.remove();
+		}
 		const tweetText = findTweetTextEl(article);
 		if (tweetText && belongsToArticle(tweetText, article) && !inMediaChrome(tweetText) && place(tweetText, "afterend")) return;
 		if (place(findActionBar(article), "beforebegin")) return;
 		if (place(queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article && !inMediaChrome(node)) ?? null, "afterend")) return;
 		if (place(article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]"), "beforebegin")) return;
-		if (article.hasAttribute("data-urn") || article.classList.contains("feed-shared-update-v2") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity")) {
-			article.prepend(row);
-			if (!inMediaChrome(row)) return;
-			row.remove();
-		}
 		article.append(row);
 	}
 	function upsertBadge(article, text, tone, dot) {
@@ -500,7 +508,7 @@
 			row = document.createElement("div");
 			row.className = ROW_CLASS;
 			insertBadgeRow(article, row);
-		}
+		} else if (isLinkedInCard(article)) placeLinkedInBadge(article, row);
 		let badge = row.querySelector(`.${BADGE_CLASS}`);
 		if (!badge) {
 			badge = document.createElement("span");

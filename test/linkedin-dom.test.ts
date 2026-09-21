@@ -162,3 +162,66 @@ test('regression LI badge placement: row is first child of the card', () => {
     'badge must appear before Recomendar/Comentar',
   );
 });
+
+test('regression LI badge: re-homes row from bottom to top on applyVerdict', () => {
+  const root = mount(`
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7006666666" id="rehome-post">
+      <div class="update-components-actor__title"><a href="/in/x"><span aria-hidden="true">Author</span></a></div>
+      <div class="feed-shared-update-v2__commentary update-components-text">
+        <span dir="ltr">Body text long enough for extract so the badge must stay at the top of this card.</span>
+      </div>
+      <div class="social-details-social-activity"><button>Recomendar</button></div>
+    </div>`);
+  const article = root.querySelector('#rehome-post') as HTMLElement;
+  const stray = document.createElement('div');
+  stray.className = 'slop-guard-row';
+  stray.innerHTML = '<span class="slop-guard-badge">old</span>';
+  article.append(stray);
+  assert.equal(article.lastElementChild, stray);
+  applyVerdict(
+    article,
+    {
+      tweetId: 'li-activity-7006666666',
+      label: 'not_slop' as const,
+      slopP: 0.0,
+      notP: 1,
+      model: 'jev-latest',
+    },
+    { ...DEFAULT_SETTINGS, showNotSlop: true },
+  );
+  assert.equal(article.querySelectorAll('.slop-guard-row').length, 1);
+  assert.equal(article.firstElementChild?.className, 'slop-guard-row');
+});
+
+test('collapsed LI show-more: extracts full commentary, not only truncated teaser', () => {
+  const full =
+    'La Casa Real cuesta 8,4 millones al año. Eso es lo que pone en el papel oficial. Pero el coste real es mucho mayor cuando sumas seguridad, viajes y estructura mediática alrededor de la monarquía en España hoy.';
+  const root = mount(`
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7007777777" id="collapse-post">
+      <div class="update-components-actor__title"><a href="/in/yonatan"><span aria-hidden="true">Yonatan</span></a></div>
+      <div class="feed-shared-inline-show-more-text feed-shared-update-v2__commentary update-components-text">
+        <span dir="ltr">${full}</span>
+        <button type="button">… más</button>
+      </div>
+      <div class="social-details-social-activity"><button>Recomendar</button></div>
+    </div>`);
+  const item = extractLinkedInPost(root.querySelector('#collapse-post') as HTMLElement);
+  assert.ok(item);
+  assert.ok(item!.text.includes('coste real'), `expected full body, got: ${item!.text}`);
+  assert.ok(item!.text.length > 80);
+  assert.equal(/más$/i.test(item!.text), false);
+});
+
+test('Sugerencias rail is not listed as a LinkedIn post card', () => {
+  const root = mount(`
+    <div class="feed-shared-update-v2" id="suggestions-rail">
+      <h2>Sugerencias</h2>
+      <div class="discovery-ocean-actor-item">Person 1</div>
+    </div>
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7008888888" id="real-post">
+      <div class="feed-shared-update-v2__commentary"><span dir="ltr">A real LinkedIn update with enough text to be judged as a post body here.</span></div>
+    </div>`);
+  const cards = listLinkedInArticles(root);
+  assert.equal(cards.some((c) => c.id === 'suggestions-rail'), false);
+  assert.equal(cards.some((c) => c.id === 'real-post'), true);
+});
