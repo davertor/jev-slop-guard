@@ -5,23 +5,6 @@ var background = (function() {
 		return arg;
 	}
 	//#endregion
-	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
-	/**
-	* Contains the `browser` export which you should use to access the extension
-	* APIs in your project:
-	*
-	* ```ts
-	* import { browser } from 'wxt/browser';
-	*
-	* browser.runtime.onInstalled.addListener(() => {
-	*   // ...
-	* });
-	* ```
-	*
-	* @module wxt/browser
-	*/
-	var browser = globalThis.browser?.runtime?.id ? globalThis.browser : globalThis.chrome;
-	//#endregion
 	//#region node_modules/.pnpm/@typesafe-ai+sdk@0.6.0/node_modules/@typesafe-ai/sdk/dist/index.mjs
 	var requestIdFrom = (headers) => headers.get("x-typesafe-request-id") ?? void 0;
 	/**
@@ -736,7 +719,40 @@ var background = (function() {
 		return parseChoiceAnswer(tweet.id, typeof data.model === "string" ? data.model : "jev-latest", data.answers.verdict);
 	}
 	//#endregion
+	//#region lib/chrome-msg.ts
+	function chromeApi() {
+		const root = globalThis;
+		const api = root.chrome?.runtime ? root.chrome : root.browser;
+		if (!api?.runtime) throw new Error("chrome extension API unavailable");
+		return api;
+	}
+	function isXUrl(url) {
+		if (!url) return false;
+		try {
+			const { protocol, hostname } = new URL(url);
+			if (protocol !== "https:") return false;
+			return hostname === "x.com" || hostname === "www.x.com" || hostname === "twitter.com" || hostname === "www.twitter.com";
+		} catch {
+			return false;
+		}
+	}
+	function sendTabMessage(tabId, message) {
+		return new Promise((resolve, reject) => {
+			const api = chromeApi();
+			api.tabs.sendMessage(tabId, message, (response) => {
+				const err = api.runtime.lastError;
+				if (err) reject(new Error(err.message));
+				else resolve(response);
+			});
+		});
+	}
+	//#endregion
 	//#region lib/messages.ts
+	function isInjectXMessage(value) {
+		if (!value || typeof value !== "object") return false;
+		const msg = value;
+		return msg.type === "INJECT_X" && typeof msg.tabId === "number";
+	}
 	function isJudgeTweetMessage(value) {
 		if (!value || typeof value !== "object") return false;
 		const msg = value;
@@ -769,6 +785,23 @@ var background = (function() {
 		};
 	}
 	//#endregion
+	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0_supports-color@7.2.0__rolldown@1.2.9_625403a819c950bf0584edb17f563f87/node_modules/wxt/dist/browser.mjs
+	/**
+	* Contains the `browser` export which you should use to access the extension
+	* APIs in your project:
+	*
+	* ```ts
+	* import { browser } from 'wxt/browser';
+	*
+	* browser.runtime.onInstalled.addListener(() => {
+	*   // ...
+	* });
+	* ```
+	*
+	* @module wxt/browser
+	*/
+	var browser = globalThis.browser?.runtime?.id ? globalThis.browser : globalThis.chrome;
+	//#endregion
 	//#region lib/settings.ts
 	var SETTINGS_KEY = "slopGuard.settings.v1";
 	var DEFAULT_SETTINGS = {
@@ -798,6 +831,72 @@ var background = (function() {
 		return mergeSettings((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
 	}
 	//#endregion
+	//#region lib/x-inject.ts
+	var X_JS = "content-scripts/x-timeline.js";
+	var X_CSS = "content-scripts/x-timeline.css";
+	var X_QUERY = [
+		"https://x.com/*",
+		"https://www.x.com/*",
+		"https://twitter.com/*",
+		"https://www.twitter.com/*"
+	];
+	async function pingXStatus(tabId) {
+		try {
+			const result = await sendTabMessage(tabId, { type: "X_STATUS" });
+			return result?.ok && result.live ? result : null;
+		} catch {
+			return null;
+		}
+	}
+	async function injectXTimeline(tabId) {
+		const api = chromeApi();
+		try {
+			await api.scripting.insertCSS({
+				target: { tabId },
+				files: [X_CSS]
+			});
+		} catch {}
+		await api.scripting.executeScript({
+			target: { tabId },
+			files: [X_JS]
+		});
+	}
+	/** Ping the content script; inject the bundled X file if the tab has no receiver. */
+	async function ensureXTimeline(tabId) {
+		const existing = await pingXStatus(tabId);
+		if (existing) return existing;
+		try {
+			await injectXTimeline(tabId);
+		} catch (err) {
+			return {
+				ok: false,
+				error: err instanceof Error ? err.message : String(err)
+			};
+		}
+		return await pingXStatus(tabId) ?? {
+			ok: false,
+			error: "Injected, but X script did not answer."
+		};
+	}
+	async function injectAllXTabs() {
+		const tabs = await chromeApi().tabs.query({ url: X_QUERY });
+		for (const tab of tabs) if (typeof tab.id === "number" && isXUrl(tab.url)) ensureXTimeline(tab.id);
+	}
+	function watchXTabs() {
+		const api = chromeApi();
+		api.tabs.onUpdated.addListener((tabId, info, tab) => {
+			if (info.status !== "complete") return;
+			if (!isXUrl(tab.url)) return;
+			ensureXTimeline(tabId);
+		});
+		api.runtime.onInstalled.addListener(() => {
+			injectAllXTabs();
+		});
+		api.runtime.onStartup.addListener(() => {
+			injectAllXTabs();
+		});
+	}
+	//#endregion
 	//#region entrypoints/background.ts
 	var CACHE_KEY = "slopGuard.cache.v2";
 	var CACHE_LIMIT = 400;
@@ -806,24 +905,60 @@ var background = (function() {
 	var inflight = /* @__PURE__ */ new Map();
 	var background_default = defineBackground(() => {
 		hydrateCache();
-		browser.runtime.onMessage.addListener((message) => {
-			if (message.type === "PING") return Promise.resolve({ ok: true });
-			if (message.type === "GET_SETTINGS") return loadSettings().then((settings) => ({
-				ok: true,
-				settings
-			}));
-			if (isJudgeTweetMessage(message)) return judge(message.tweet);
+		watchXTabs();
+		chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+			const msg = message;
+			if (msg.type === "PING") {
+				sendResponse({ ok: true });
+				return;
+			}
+			if (msg.type === "GET_SETTINGS") {
+				loadSettings().then((settings) => ({
+					ok: true,
+					settings
+				})).then(sendResponse).catch((err) => {
+					sendResponse({
+						ok: false,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				});
+				return true;
+			}
+			if (isJudgeTweetMessage(msg)) {
+				judge(msg.tweet).then(sendResponse).catch((err) => {
+					sendResponse({
+						ok: false,
+						code: "JEV",
+						error: err instanceof Error ? err.message : "Jev request failed"
+					});
+				});
+				return true;
+			}
+			if (isInjectXMessage(msg)) {
+				ensureXTimeline(msg.tabId).then((result) => {
+					sendResponse(result.ok ? { ok: true } : {
+						ok: false,
+						error: result.error
+					});
+				}).catch((err) => {
+					sendResponse({
+						ok: false,
+						error: err instanceof Error ? err.message : String(err)
+					});
+				});
+				return true;
+			}
 		});
 	});
 	async function hydrateCache() {
-		const raw = (await browser.storage.session.get(CACHE_KEY))[CACHE_KEY];
+		const raw = (await chromeApi().storage.session.get(CACHE_KEY))[CACHE_KEY];
 		if (!raw || typeof raw !== "object") return;
 		for (const [id, verdict] of Object.entries(raw)) if (verdict && typeof verdict.slopP === "number") memory.set(id, verdict);
 	}
 	async function persistCache() {
 		const dump = {};
 		for (const [id, verdict] of memory) dump[id] = verdict;
-		await browser.storage.session.set({ [CACHE_KEY]: dump });
+		await chromeApi().storage.session.set({ [CACHE_KEY]: dump });
 	}
 	function remember(verdict) {
 		memory.set(verdict.tweetId, verdict);
@@ -888,7 +1023,7 @@ var background = (function() {
 		}
 	}
 	//#endregion
-	//#region \0virtual:wxt-background-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/background.ts
+	//#region \0virtual:wxt-background-entrypoint?/workspace/entrypoints/background.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

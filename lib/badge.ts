@@ -71,12 +71,18 @@ function upsertBadge(article: HTMLElement, text: string, tone: string, dot: bool
     row.className = ROW_CLASS;
     const tweetText = [...article.querySelectorAll('[data-testid="tweetText"]')].find(
       (node): node is HTMLElement =>
-        node instanceof HTMLElement && node.closest('article[data-testid="tweet"]') === article,
+        node instanceof HTMLElement &&
+        (node.closest('article[data-testid="tweet"]') ?? node.closest('[data-testid="cellInnerDiv"]')) ===
+          article,
     );
-    if (tweetText?.parentElement) {
-      tweetText.parentElement.insertBefore(row, tweetText.nextSibling);
+    if (tweetText) {
+      tweetText.insertAdjacentElement('afterend', row);
     } else {
-      article.append(row);
+      const media = article.querySelector(
+        '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="card.wrapper"]',
+      );
+      if (media) media.insertAdjacentElement('beforebegin', row);
+      else article.append(row);
     }
   }
   let badge = row.querySelector<HTMLElement>(`.${BADGE_CLASS}`);
