@@ -11,10 +11,12 @@ export default defineConfig({
     name: 'Slop Guard',
     description:
       'Real-time slop detector for X and LinkedIn: Not slop / Stop badges, blur, and a SLOP stamp.',
-    permissions: ['storage'],
+    permissions: ['storage', 'scripting', 'tabs'],
     host_permissions: [
       'https://x.com/*',
+      'https://www.x.com/*',
       'https://twitter.com/*',
+      'https://www.twitter.com/*',
       'https://www.linkedin.com/*',
       'https://linkedin.com/*',
       'https://api.typesafe.ai/*',

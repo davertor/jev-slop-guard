@@ -1,6 +1,7 @@
 import '../../lib/badge.css';
 import './style.css';
 import { applyVerdict, clearStamp, markError } from '../../lib/badge';
+import { sendRuntimeMessage } from '../../lib/chrome-msg';
 import type { JudgeResult } from '../../lib/messages';
 import { DEFAULT_SETTINGS, loadSettings } from '../../lib/settings';
 import { listTweetArticles } from '../../lib/tweet';
@@ -71,10 +72,10 @@ async function run(): Promise<void> {
       }, 450);
       continue;
     }
-    const result = (await browser.runtime.sendMessage({
+    const result = await sendRuntimeMessage<JudgeResult>({
       type: 'JUDGE_TWEET',
       tweet: { id: tweet.id, text: tweet.text, handle: `@${tweet.handle}` },
-    })) as JudgeResult;
+    });
     if (result.ok) {
       applyVerdict(article, result.verdict, settings, {
         onPutBack: (_id, card) => clearStamp(card),
