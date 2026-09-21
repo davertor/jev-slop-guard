@@ -1,4 +1,5 @@
 import type { Settings } from './settings';
+import { belongsToArticle, findActionBar, findTweetTextEl, queryDeep } from './tweet';
 import { badgeCopy, shouldStamp, type Verdict } from './verdict';
 
 export const BADGE_ATTR = 'data-slop-guard';
@@ -64,26 +65,53 @@ export function reapplyFromDataset(
   );
 }
 
+export function ownSlopRow(article: HTMLElement): HTMLElement | null {
+  for (const row of article.querySelectorAll(`.${ROW_CLASS}`)) {
+    if (row instanceof HTMLElement && belongsToArticle(row, article)) return row;
+  }
+  return null;
+}
+
+function ownOverlay(article: HTMLElement): HTMLElement | null {
+  for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) {
+    if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
+  }
+  return null;
+}
+
+function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
+  const tweetText = findTweetTextEl(article);
+  if (tweetText && belongsToArticle(tweetText, article)) {
+    tweetText.insertAdjacentElement('afterend', row);
+    return;
+  }
+  const actions = findActionBar(article);
+  if (actions) {
+    actions.insertAdjacentElement('beforebegin', row);
+    return;
+  }
+  const nested = queryDeep(article, '[data-testid="tweet"]').find((node) => node !== article);
+  if (nested) {
+    nested.insertAdjacentElement('afterend', row);
+    return;
+  }
+  if (tweetText) {
+    tweetText.insertAdjacentElement('afterend', row);
+    return;
+  }
+  const media = article.querySelector(
+    '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="card.wrapper"]',
+  );
+  if (media) media.insertAdjacentElement('beforebegin', row);
+  else article.append(row);
+}
+
 function upsertBadge(article: HTMLElement, text: string, tone: string, dot: boolean): void {
-  let row = article.querySelector<HTMLElement>(`.${ROW_CLASS}`);
+  let row = ownSlopRow(article);
   if (!row) {
     row = document.createElement('div');
     row.className = ROW_CLASS;
-    const tweetText = [...article.querySelectorAll('[data-testid="tweetText"]')].find(
-      (node): node is HTMLElement =>
-        node instanceof HTMLElement &&
-        (node.closest('article[data-testid="tweet"]') ?? node.closest('[data-testid="cellInnerDiv"]')) ===
-          article,
-    );
-    if (tweetText) {
-      tweetText.insertAdjacentElement('afterend', row);
-    } else {
-      const media = article.querySelector(
-        '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="card.wrapper"]',
-      );
-      if (media) media.insertAdjacentElement('beforebegin', row);
-      else article.append(row);
-    }
+    insertBadgeRow(article, row);
   }
   let badge = row.querySelector<HTMLElement>(`.${BADGE_CLASS}`);
   if (!badge) {
@@ -109,7 +137,7 @@ function upsertBadge(article: HTMLElement, text: string, tone: string, dot: bool
 
 function stampArticle(article: HTMLElement, onPutBack: () => void): void {
   article.classList.add('slop-guard-stamped');
-  let overlay = article.querySelector<HTMLElement>(`.${OVERLAY_CLASS}`);
+  let overlay = ownOverlay(article);
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.className = OVERLAY_CLASS;
@@ -134,10 +162,10 @@ function stampArticle(article: HTMLElement, onPutBack: () => void): void {
 }
 
 export function clearBadge(article: HTMLElement): void {
-  article.querySelector(`.${ROW_CLASS}`)?.remove();
+  ownSlopRow(article)?.remove();
 }
 
 export function clearStamp(article: HTMLElement): void {
   article.classList.remove('slop-guard-stamped');
-  article.querySelector(`.${OVERLAY_CLASS}`)?.remove();
+  ownOverlay(article)?.remove();
 }

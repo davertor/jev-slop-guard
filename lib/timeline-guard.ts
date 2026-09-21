@@ -1,4 +1,4 @@
-import { applyVerdict, clearStamp, markError, markPending, reapplyFromDataset } from './badge';
+import { applyVerdict, clearStamp, markError, markPending, ownSlopRow, reapplyFromDataset } from './badge';
 import { chromeApi, sendRuntimeMessage } from './chrome-msg';
 import type { JudgeResult } from './messages';
 import { debounce } from './queue';
@@ -35,7 +35,7 @@ export function runTimelineGuard(
       article.removeAttribute('data-slop-guard');
       delete article.dataset.slopId;
       delete article.dataset.slopPendingAt;
-      article.querySelector('.slop-guard-row')?.remove();
+      ownSlopRow(article)?.remove();
       clearStamp(article);
     },
 
@@ -60,6 +60,13 @@ export function runTimelineGuard(
         if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) {
           slopFeed.reset(article);
         }
+        return;
+      }
+      if (state === 'done' && !ownSlopRow(article)) {
+        reapplyFromDataset(article, settings, {
+          undone: undoneIds.has(article.dataset.slopId ?? ''),
+          onPutBack: slopFeed.putBack,
+        });
       }
     },
 
@@ -121,20 +128,20 @@ export function runTimelineGuard(
         }
 
         markError(article, 'jev error');
-        const badge = article.querySelector('.slop-guard-badge');
+        const badge = ownSlopRow(article)?.querySelector('.slop-guard-badge');
         if (badge instanceof HTMLElement) badge.title = result.error;
       } catch (err) {
         if (ctx.isInvalid) return;
         slopFeed.reset(article);
         markError(article, 'retry');
-        const badge = article.querySelector('.slop-guard-badge');
+        const badge = ownSlopRow(article)?.querySelector('.slop-guard-badge');
         if (badge instanceof HTMLElement) {
           badge.title = err instanceof Error ? err.message : 'Message failed';
         }
         window.setTimeout(() => {
           if (article.getAttribute('data-slop-guard') === 'error') {
             article.removeAttribute('data-slop-guard');
-            article.querySelector('.slop-guard-row')?.remove();
+            ownSlopRow(article)?.remove();
           }
         }, 2500);
       } finally {
