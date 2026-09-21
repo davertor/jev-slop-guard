@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.24-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.24">
+  <img src="https://img.shields.io/badge/version-0.1.25-ab2f19?style=flat-square&labelColor=191511" alt="Version 0.1.25">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-57503f?style=flat-square&labelColor=191511" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/chrome-manifest%20v3-57503f?style=flat-square&labelColor=191511" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/sites-x.com%20%C2%B7%20linkedin.com-57503f?style=flat-square&labelColor=191511" alt="Works on x.com and linkedin.com">
