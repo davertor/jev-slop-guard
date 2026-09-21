@@ -36,6 +36,16 @@ function chromeApi() {
 	if (!api?.runtime) throw new Error("chrome extension API unavailable");
 	return api;
 }
+function isLinkedInUrl(url) {
+	if (!url) return false;
+	try {
+		const { protocol, hostname } = new URL(url);
+		if (protocol !== "https:") return false;
+		return hostname === "linkedin.com" || hostname === "www.linkedin.com";
+	} catch {
+		return false;
+	}
+}
 function isXUrl(url) {
 	if (!url) return false;
 	try {
@@ -116,4 +126,4 @@ async function saveSettings(next) {
 	await browser.storage.local.set({ [SETTINGS_KEY]: mergeSettings(next) });
 }
 //#endregion
-export { chromeApi as a, sendTabMessage as c, browser as i, loadSettings as n, isXUrl as o, saveSettings as r, sendRuntimeMessage as s, DEFAULT_SETTINGS as t };
+export { chromeApi as a, sendRuntimeMessage as c, browser as i, sendTabMessage as l, loadSettings as n, isLinkedInUrl as o, saveSettings as r, isXUrl as s, DEFAULT_SETTINGS as t };
