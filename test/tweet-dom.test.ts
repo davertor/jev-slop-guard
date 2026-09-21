@@ -961,3 +961,98 @@ test('screenshot false-who-to-follow: timeline tweet with Seguir still badges', 
   assert.ok(tweet, 'timeline tweet with Seguir was excluded');
   assertReadyBadge(tweet, '12101', /Seguir button/);
 });
+
+/**
+ * probe-6-promoted.png — live chip "7 cards · 1 ready · 6 promoted".
+ * Organic video tweets often carry data-testid=placementTracking without being ads.
+ * Regression: placementTracking alone must NOT skip extract.
+ */
+function fixtureOrganicVideoWithPlacementTracking(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <article data-testid="tweet" id="stefan-organic">
+        <div data-testid="placementTracking"></div>
+        <div role="group">
+          <div data-testid="User-Name">
+            <a href="/heystefan_"><span>Stefan</span></a>
+            <a href="/heystefan_">@heystefan_</a>
+          </div>
+          <a href="/heystefan_/status/12001"><time datetime="2026-09-19">19 sept.</time></a>
+          <div data-testid="tweetText">when a designer gets access to Jev</div>
+          <div data-testid="videoPlayer">
+            <time datetime="PT0M23S">0:23</time>
+            <div data-testid="tweetText">Original</div>
+          </div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+/** Real promoted ad: promotedIndicator + Promoted label. */
+function fixtureRealPromotedAd(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <article data-testid="tweet" id="real-ad">
+        <div data-testid="promotedIndicator"></div>
+        <div data-testid="placementTracking"><span>Promoted</span></div>
+        <div data-testid="User-Name"><a href="/BrandAds">@BrandAds</a></div>
+        <a href="/BrandAds/status/12099"><time>1h</time></a>
+        <div data-testid="tweetText">Buy our SaaS today with this special offer</div>
+        ${actionBar()}
+      </article>
+    </div>`;
+}
+
+/**
+ * miss-emm-repost-video.png — RT "reposteó" + video; may also carry placementTracking.
+ */
+function fixtureMissEmmRepostVideo(): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <div data-testid="socialContext"><span>Emm | scenario.com reposteó</span></div>
+      <article data-testid="tweet" id="emm-rt">
+        <div data-testid="placementTracking"></div>
+        <div role="group">
+          <div data-testid="User-Name">
+            <a href="/emmanuel_2m"><span>Emm | scenario.com</span></a>
+            <a href="/emmanuel_2m">@emmanuel_2m</a>
+          </div>
+          <a href="/emmanuel_2m/status/12002"><time>18 sept.</time></a>
+          <div data-testid="tweetText">Scenario MCP + GPT Astra is absurd. Blueprint to 3D model to full visualization.</div>
+          <div data-testid="videoPlayer"><time datetime="PT0M35S">0:35</time></div>
+          ${actionBar()}
+        </div>
+      </article>
+    </div>`;
+}
+
+test('regression probe-6-promoted: organic video with placementTracking still extracts', () => {
+  const root = mount(fixtureOrganicVideoWithPlacementTracking());
+  const card = listTweetArticles(root).find((c) => c.id === 'stefan-organic');
+  assert.ok(card, 'organic video card not listed');
+  const info = explainExtract(card);
+  assert.equal(info.ok, true, `expected ok, got ${info.reason}`);
+  assert.notEqual(info.reason, 'promoted');
+  assertReadyBadge(card, '12001', /designer gets access to Jev/);
+});
+
+test('regression: real Promoted ad is still skipped', () => {
+  const root = mount(fixtureRealPromotedAd());
+  const card = root.querySelector('#real-ad') as HTMLElement;
+  assert.ok(card);
+  const info = explainExtract(card);
+  assert.equal(info.ok, false);
+  assert.equal(info.reason, 'promoted');
+  assert.equal(extractTweet(card), null);
+});
+
+test('screenshot miss-emm-repost-video: RT + video + placementTracking extracts', () => {
+  const root = mount(fixtureMissEmmRepostVideo());
+  const card = listTweetArticles(root).find((c) => c.id === 'emm-rt');
+  assert.ok(card, 'Emm RT video not listed');
+  const info = explainExtract(card);
+  assert.equal(info.ok, true, info.reason);
+  assertReadyBadge(card, '12002', /Scenario MCP/);
+  assert.equal(isRetweetCard(card), true);
+});
