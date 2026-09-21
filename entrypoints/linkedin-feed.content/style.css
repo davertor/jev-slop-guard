@@ -1,0 +1,66 @@
+.slop-guard-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 4px 0 0 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font: 600 11px/18px ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  color: #e7e9ea;
+  background: #1e2126;
+}
+
+.slop-guard-badge[data-tone='slop'] {
+  color: #111;
+  background: #e8b44c;
+  border-color: #e8b44c;
+}
+
+.slop-guard-badge[data-tone='human'] {
+  color: #b9f4c8;
+  background: #12321c;
+  border-color: #1f6b38;
+}
+
+.slop-guard-badge[data-tone='pending'] {
+  color: #c7cbd1;
+  background: #24282f;
+}
+
+.slop-guard-badge[data-tone='error'] {
+  color: #ffd0d0;
+  background: #3a1515;
+  border-color: #7a2b2b;
+}
+
+article.slop-guard-dim {
+  opacity: 0.28;
+  filter: grayscale(0.6);
+  transition: opacity 160ms ease;
+}
+
+article.slop-guard-hide {
+  display: none !important;
+}
+
+.slop-guard-banner {
+  position: fixed;
+  z-index: 2147483646;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}

@@ -1,0 +1,137 @@
+import type { Settings } from './settings';
+import { badgeCopy, shouldStamp, type Verdict } from './verdict';
+
+export const BADGE_ATTR = 'data-slop-guard';
+export const BADGE_CLASS = 'slop-guard-badge';
+export const ROW_CLASS = 'slop-guard-row';
+export const OVERLAY_CLASS = 'slop-guard-overlay';
+
+export function markPending(article: HTMLElement): void {
+  article.setAttribute(BADGE_ATTR, 'pending');
+}
+
+export function markError(article: HTMLElement, message: string): void {
+  article.setAttribute(BADGE_ATTR, 'error');
+  upsertBadge(article, message, 'error', false);
+  clearStamp(article);
+}
+
+export function applyVerdict(
+  article: HTMLElement,
+  verdict: Verdict,
+  settings: Settings,
+  opts: { undone?: boolean; onPutBack?: (id: string, article: HTMLElement) => void } = {},
+): void {
+  article.setAttribute(BADGE_ATTR, 'done');
+  article.dataset.slopP = String(verdict.slopP);
+  article.dataset.slopNotP = String(verdict.notP);
+  article.dataset.slopLabel = verdict.label;
+  article.dataset.slopModel = verdict.model;
+  article.classList.add('slop-guard-card');
+
+  const over = shouldStamp(verdict, settings.threshold, settings.stampEnabled);
+  const copy = badgeCopy(verdict, over);
+  if (copy.tone === 'ok' && !settings.showNotSlop) {
+    clearBadge(article);
+  } else {
+    upsertBadge(article, copy.text, copy.tone, copy.tone === 'stop');
+  }
+
+  if (over && !opts.undone) stampArticle(article, () => opts.onPutBack?.(verdict.tweetId, article));
+  else clearStamp(article);
+}
+
+export function reapplyFromDataset(
+  article: HTMLElement,
+  settings: Settings,
+  opts: { undone?: boolean; onPutBack?: (id: string, article: HTMLElement) => void } = {},
+): void {
+  if (article.getAttribute(BADGE_ATTR) !== 'done') return;
+  const slopP = Number(article.dataset.slopP);
+  const notP = Number(article.dataset.slopNotP);
+  if (!Number.isFinite(slopP) || !Number.isFinite(notP)) return;
+  applyVerdict(
+    article,
+    {
+      tweetId: article.dataset.slopId ?? '',
+      label: article.dataset.slopLabel === 'slop' ? 'slop' : 'not_slop',
+      slopP,
+      notP,
+      model: article.dataset.slopModel ?? 'jev-latest',
+    },
+    settings,
+    opts,
+  );
+}
+
+function upsertBadge(article: HTMLElement, text: string, tone: string, dot: boolean): void {
+  let row = article.querySelector<HTMLElement>(`.${ROW_CLASS}`);
+  if (!row) {
+    row = document.createElement('div');
+    row.className = ROW_CLASS;
+    const tweetText = [...article.querySelectorAll('[data-testid="tweetText"]')].find(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement && node.closest('article[data-testid="tweet"]') === article,
+    );
+    if (tweetText?.parentElement) {
+      tweetText.parentElement.insertBefore(row, tweetText.nextSibling);
+    } else {
+      article.append(row);
+    }
+  }
+  let badge = row.querySelector<HTMLElement>(`.${BADGE_CLASS}`);
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = BADGE_CLASS;
+    row.append(badge);
+  }
+  badge.dataset.tone = tone;
+  badge.replaceChildren();
+  if (tone === 'ok') {
+    const check = document.createElement('span');
+    check.className = 'slop-guard-check';
+    check.textContent = '✓';
+    badge.append(check);
+  } else if (dot) {
+    const mark = document.createElement('span');
+    mark.className = 'slop-guard-dot';
+    badge.append(mark);
+  }
+  badge.append(document.createTextNode(text));
+  badge.title = text;
+}
+
+function stampArticle(article: HTMLElement, onPutBack: () => void): void {
+  article.classList.add('slop-guard-stamped');
+  let overlay = article.querySelector<HTMLElement>(`.${OVERLAY_CLASS}`);
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = OVERLAY_CLASS;
+    const stamp = document.createElement('div');
+    stamp.className = 'slop-guard-stamp';
+    stamp.textContent = 'SLOP';
+    const putBack = document.createElement('button');
+    putBack.type = 'button';
+    putBack.className = 'slop-guard-putback';
+    putBack.textContent = 'Show the post';
+    overlay.append(stamp, putBack);
+    article.append(overlay);
+  }
+  const button = overlay.querySelector('.slop-guard-putback');
+  if (button instanceof HTMLButtonElement) {
+    button.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onPutBack();
+    };
+  }
+}
+
+export function clearBadge(article: HTMLElement): void {
+  article.querySelector(`.${ROW_CLASS}`)?.remove();
+}
+
+export function clearStamp(article: HTMLElement): void {
+  article.classList.remove('slop-guard-stamped');
+  article.querySelector(`.${OVERLAY_CLASS}`)?.remove();
+}
