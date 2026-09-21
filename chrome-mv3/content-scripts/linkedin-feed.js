@@ -64,11 +64,22 @@
 			if (el.closest(".feed-shared-update-v2[data-urn], div[data-urn^=\"urn:li:activity\"]") && el.closest(".feed-shared-update-v2[data-urn], div[data-urn^=\"urn:li:activity\"]") !== el) return false;
 			return true;
 		}).filter((el) => {
+			if (isLinkedInNoiseModule(el)) return false;
 			const rectH = el.getBoundingClientRect().height;
 			const h = rectH > 0 ? rectH : el.offsetHeight || 0;
 			if (h === 0) return true;
 			return h > 80 && h < Math.max(window.innerHeight, 600) * 2.5;
 		});
+	}
+	/** People/company suggestion rails, not real posts. */
+	function isLinkedInNoiseModule(article) {
+		const header = clean(article.querySelector("h2, h3, .feed-shared-header, [class*=\"suggestion\"]")?.textContent ?? "");
+		if (/^(Sugerencias|Suggestions|People you may know|Personas que quizás conozcas)$/i.test(header)) return true;
+		if (article.querySelector("[data-view-name*=\"suggestion\"], .discovery-ocean-actor-item, .reusable-search__result-container")) {
+			const urn = article.getAttribute("data-urn") ?? article.getAttribute("data-id") ?? "";
+			if (!/urn:li:(activity|ugcPost|share)/.test(urn)) return true;
+		}
+		return false;
 	}
 	function extractLinkedInPost(article) {
 		if (isLinkedInPromoted(article)) return null;
@@ -105,23 +116,33 @@
 	function dropNested(els) {
 		return els.filter((el) => !els.some((other) => other !== el && other.contains(el)));
 	}
+	function stripSeeMore(text) {
+		return text.replace(/(\s*[….]{1,3}\s*)?(más|more|see more|ver más|…\s*más)\s*$/i, "").replace(/\s+/g, " ").trim();
+	}
 	function pickText(article) {
-		for (const sel of TEXT_SELECTORS) {
-			const t = clean(article.querySelector(sel)?.textContent ?? "");
-			if (t.length >= 12) return t;
-		}
 		const candidates = [];
-		for (const el of article.querySelectorAll("span[dir=\"ltr\"], p, span")) {
-			if (el.closest("button, nav, footer, .social-details-social-counts, [role=\"button\"]")) continue;
-			const t = clean(el.textContent ?? "");
+		for (const sel of TEXT_SELECTORS) for (const node of article.querySelectorAll(sel)) {
+			if (!(node instanceof HTMLElement)) continue;
+			if (node.closest("button, nav, footer, .social-details-social-counts, .social-details-social-activity, [role=\"button\"]")) continue;
+			const t = stripSeeMore(clean(node.textContent ?? ""));
+			if (t.length >= 12) candidates.push(t);
+		}
+		for (const node of article.querySelectorAll(".feed-shared-inline-show-more-text, .feed-shared-update-v2__description, .update-components-text")) {
+			if (!(node instanceof HTMLElement)) continue;
+			const t = stripSeeMore(clean(node.textContent ?? ""));
+			if (t.length >= 12) candidates.push(t);
+		}
+		for (const el of article.querySelectorAll("span[dir=\"ltr\"], p")) {
+			if (el.closest("button, nav, footer, .social-details-social-counts, .social-details-social-activity, [role=\"button\"], .update-components-actor")) continue;
+			const t = stripSeeMore(clean(el.textContent ?? ""));
 			if (t.length >= 40 && t.length < 4e3) candidates.push(t);
 		}
 		candidates.sort((a, b) => b.length - a.length);
 		if (candidates[0]) return candidates[0];
 		let best = "";
 		for (const el of article.querySelectorAll("span, p, div")) {
-			if (el.closest("button, a[href*=\"comment\"], .social-details-social-counts, [role=\"button\"]")) continue;
-			const t = clean(el.textContent ?? "");
+			if (el.closest("button, a[href*=\"comment\"], .social-details-social-counts, .social-details-social-activity, [role=\"button\"]")) continue;
+			const t = stripSeeMore(clean(el.textContent ?? ""));
 			if (t.length > best.length && t.length < 4e3 && t.length >= 12) best = t;
 		}
 		return best;
@@ -360,6 +381,14 @@
 		for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
 		return null;
 	}
+	function isLinkedInCard(article) {
+		return article.hasAttribute("data-urn") || article.hasAttribute("data-id") || article.classList.contains("feed-shared-update-v2") || article.classList.contains("occludable-update") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity");
+	}
+	/** Keep LinkedIn badge pinned as the first child (top of the card). */
+	function placeLinkedInBadge(article, row) {
+		if (article.firstElementChild !== row) article.prepend(row);
+		row.dataset.slopLiPlacement = "top";
+	}
 	function insertBadgeRow(article, row) {
 		const place = (target, where) => {
 			if (!target) return false;
@@ -368,16 +397,16 @@
 			row.remove();
 			return false;
 		};
+		if (isLinkedInCard(article)) {
+			placeLinkedInBadge(article, row);
+			if (!inMediaChrome(row)) return;
+			row.remove();
+		}
 		const tweetText = findTweetTextEl(article);
 		if (tweetText && belongsToArticle(tweetText, article) && !inMediaChrome(tweetText) && place(tweetText, "afterend")) return;
 		if (place(findActionBar(article), "beforebegin")) return;
 		if (place(queryDeep(article, "[data-testid=\"tweet\"]").find((node) => node !== article && !inMediaChrome(node)) ?? null, "afterend")) return;
 		if (place(article.querySelector("[data-testid=\"tweetPhoto\"], [data-testid=\"videoPlayer\"], [data-testid=\"videoComponent\"], [data-testid=\"previewInterstitial\"], [data-testid=\"card.wrapper\"]"), "beforebegin")) return;
-		if (article.hasAttribute("data-urn") || article.classList.contains("feed-shared-update-v2") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity")) {
-			article.prepend(row);
-			if (!inMediaChrome(row)) return;
-			row.remove();
-		}
 		article.append(row);
 	}
 	function upsertBadge(article, text, tone, dot) {
@@ -386,7 +415,7 @@
 			row = document.createElement("div");
 			row.className = ROW_CLASS;
 			insertBadgeRow(article, row);
-		}
+		} else if (isLinkedInCard(article)) placeLinkedInBadge(article, row);
 		let badge = row.querySelector(`.${BADGE_CLASS}`);
 		if (!badge) {
 			badge = document.createElement("span");
