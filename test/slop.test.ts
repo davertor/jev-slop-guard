@@ -38,8 +38,42 @@ test('isXUrl only matches https X/Twitter hosts', () => {
 
 test('choice question is not_slop vs slop', () => {
   assert.equal(SLOP_CHOICE.type, 'choice');
+  assert.equal(typeof SLOP_CHOICE.instructions, 'string');
   assert.ok('slop' in SLOP_CHOICE.criteria);
   assert.ok('not_slop' in SLOP_CHOICE.criteria);
+  const instructions = String(SLOP_CHOICE.instructions);
+  const slop = String(SLOP_CHOICE.criteria.slop);
+  const notSlop = String(SLOP_CHOICE.criteria.not_slop);
+
+  assert.match(instructions, /Judge the writing and intent, not the topic/);
+  assert.match(instructions, /Prefer not_slop when the post clearly adds something specific or authorship is unclear/);
+  assert.doesNotMatch(instructions, /Prefer not_slop only when/);
+  assert.match(instructions, /empty selling/i);
+  assert.match(instructions, /personal-brand flex with nothing new/i);
+  assert.match(instructions, /trendy topic without adding value/i);
+
+  assert.match(slop, /Noise, clickbait, or empty daily content/);
+  assert.match(slop, /engagement bait/);
+  assert.match(slop, /rage\/curiosity hooks with no payoff/);
+  assert.match(slop, /content for content/);
+  assert.match(slop, /templated or LLM-generic hustle\/motivation/);
+  assert.match(slop, /fake expertise without specifics/);
+  assert.match(slop, /shiny prose with no lived detail or new information/);
+  assert.match(slop, /mainly selling, hard promo, or funnel copy without substance/);
+  assert.match(slop, /personal-brand flex with nothing new/);
+  assert.match(slop, /riding a trendy topic without adding value/);
+
+  assert.match(notSlop, /concrete detail/);
+  assert.match(notSlop, /a personal take/);
+  assert.match(notSlop, /genuine question/);
+  assert.match(notSlop, /humor with specificity/);
+  assert.match(notSlop, /technical substance/);
+  assert.match(notSlop, /news with substance/);
+  assert.match(notSlop, /authorship is simply unclear/);
+  assert.match(notSlop, /empty selling/i);
+  assert.match(notSlop, /personal-brand flex/i);
+  assert.match(notSlop, /trendy topic without adding value/i);
+  assert.match(notSlop, /product post with real specifics/);
 });
 
 test('parseChoiceAnswer uses slopP for Stop / Slop percents', () => {
@@ -119,6 +153,13 @@ test('callJev posts a Choice question through the TypeSafe SDK', async () => {
     assert.equal(body.model, 'jev-latest');
     assert.equal(body.questions.verdict.type, 'choice');
     assert.deepEqual(Object.keys(body.questions.verdict.criteria).sort(), ['not_slop', 'slop']);
+    assert.match(String(body.questions.verdict.instructions), /Judge the writing and intent, not the topic/);
+    assert.match(String(body.questions.verdict.instructions), /empty selling/i);
+    assert.match(String(body.questions.verdict.criteria.slop), /Noise, clickbait, or empty daily content/);
+    assert.match(String(body.questions.verdict.criteria.slop), /personal-brand flex with nothing new/);
+    assert.match(String(body.questions.verdict.criteria.slop), /riding a trendy topic without adding value/);
+    assert.match(String(body.questions.verdict.criteria.not_slop), /concrete detail/);
+    assert.match(String(body.questions.verdict.criteria.not_slop), /product post with real specifics/);
     return new Response(
       JSON.stringify({
         model: 'jev-1.13.0',

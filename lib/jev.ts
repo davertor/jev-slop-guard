@@ -7,12 +7,12 @@ export const TYPESAFE_URL = 'https://api.typesafe.ai/v1/systemone';
 export const OPENROUTER_URL = 'https://openrouter.ai/api/alpha/decisions';
 
 export const SLOP_CHOICE = choice(
-  'Classify whether this social post is low-value slop. Judge the writing and intent, not the topic. Prefer not_slop when the post clearly adds something specific or authorship is unclear.',
+  'Classify whether this social post is low-value slop. Judge the writing and intent, not the topic. Prefer not_slop when the post clearly adds something specific or authorship is unclear. Empty selling, personal-brand flex with nothing new, and riding a trendy topic without adding value are slop too.',
   {
     slop:
-      'Noise, clickbait, or empty daily content: engagement bait; rage/curiosity hooks with no payoff; recycled “content for content’s sake”; templated or LLM-generic hustle/motivation; fake expertise without specifics; shiny prose with no lived detail or new information.',
+      'Noise, clickbait, or empty daily content: engagement bait; rage/curiosity hooks with no payoff; recycled “content for content’s sake”; templated or LLM-generic hustle/motivation; fake expertise without specifics; shiny prose with no lived detail or new information; mainly selling, hard promo, or funnel copy without substance; personal-brand flex with nothing new; riding a trendy topic without adding value.',
     not_slop:
-      'Brings something real: concrete detail, a personal take, a genuine question, humor with specificity, technical substance, news with substance, or authorship is simply unclear — polished or promotional alone is not enough to call it slop.',
+      'Brings something real: concrete detail, a personal take, a genuine question, humor with specificity, technical substance, news with substance, or authorship is simply unclear. Empty selling, personal-brand flex, or riding a trendy topic without adding value is slop even if polished; a product post with real specifics can still be not_slop.',
   },
 );
 
