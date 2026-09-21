@@ -2,19 +2,21 @@ import { i as browser, n as loadSettings, s as sendRuntimeMessage, t as DEFAULT_
 //#region lib/tweet.ts
 var STATUS_RE = /\/status\/(\d+)/;
 var REPOST_RE = /reposted|retweeted|repost[oó]|reposte[oó]|reposti[oó]|retwitte[oó]|ha\s+retwitteado|ha\s+reposteado|retuite[oó]/i;
+var SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
+var SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
+var MIN_TEXT = 4;
 function tweetIdFromHref(href) {
 	return href.match(STATUS_RE)?.[1] ?? null;
 }
 function extractTweet(article) {
 	if (isPromoted(article)) return null;
 	const text = ownTweetText(article);
-	if (text.length < 8) return null;
-	const id = ownTweetId(article);
-	if (!id) return null;
+	if (text.length < MIN_TEXT) return null;
+	const handle = ownHandle(article);
 	return {
-		id,
+		id: ownTweetId(article) ?? syntheticId(handle, text),
 		text: text.slice(0, 4e3),
-		handle: ownHandle(article),
+		handle,
 		article
 	};
 }
@@ -26,7 +28,8 @@ function extractTweet(article) {
 */
 function listTweetArticles(root = document) {
 	return uniqueElements([...queryDeep(root, "[data-testid=\"tweet\"]"), ...articlesFromCells(root)]).filter((article) => {
-		const nested = nestedTweetCards(article);
+		if (isMediaHusk(article)) return false;
+		const nested = nestedTweetCards(article).filter((card) => !isMediaHusk(card));
 		if (nested.length === 0) return true;
 		if (hasOwnTweetBody(article)) return true;
 		return !nested.some((card) => extractTweet(card));
@@ -57,10 +60,12 @@ function isRetweetCard(article) {
 	}
 	return false;
 }
-/** Own tweetText first; retweet shells fall back to the nested original. */
+/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
 function findTweetTextEl(article) {
-	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article)) return node;
-	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) return node;
+	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
+	for (const node of langCaptionNodes(article, false)) return node;
+	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) if (usableText(node.textContent)) return node;
+	for (const node of langCaptionNodes(article, true)) return node;
 	return null;
 }
 function findActionBar(article) {
@@ -77,32 +82,60 @@ function findActionBar(article) {
 	return null;
 }
 function hasOwnTweetBody(article) {
-	return collectTweetText(article, false).length >= 8;
+	return collectTweetText(article, false).length >= MIN_TEXT || collectFallbackText(article, false).length >= MIN_TEXT;
 }
 function ownTweetText(article) {
 	const own = collectTweetText(article, false);
-	if (own) return own;
-	if (isRetweetCard(article) || nestedTweetCards(article).length > 0) return collectTweetText(article, true);
-	return "";
+	if (own.length >= MIN_TEXT) return own;
+	const ownFallback = collectFallbackText(article, false);
+	if (ownFallback.length >= MIN_TEXT) return ownFallback;
+	if (isRetweetCard(article) || nestedTweetCards(article).length > 0) {
+		const nested = collectTweetText(article, true);
+		if (nested.length >= MIN_TEXT) return nested;
+		const nestedFallback = collectFallbackText(article, true);
+		if (nestedFallback.length >= MIN_TEXT) return nestedFallback;
+	}
+	return own || ownFallback;
 }
 function collectTweetText(article, allowNested) {
 	const parts = [];
 	for (const node of queryDeep(article, "[data-testid=\"tweetText\"]")) {
 		if (!allowNested && !belongsToArticle(node, article)) continue;
-		const t = node.textContent?.replace(/\s+/g, " ").trim() ?? "";
+		const t = cleanText(node.textContent);
+		if (SHOW_MORE_RE.test(t)) continue;
 		if (allowNested) {
-			if (t.length >= 8) return t;
+			if (t.length >= MIN_TEXT) return t;
 			continue;
 		}
 		if (t) parts.push(t);
 	}
 	return parts.join("\n").trim();
 }
+function collectFallbackText(article, allowNested) {
+	for (const link of queryDeep(article, "[data-testid=\"tweet-text-show-more-link\"]")) {
+		if (!allowNested && !belongsToArticle(link, article)) continue;
+		const t = cleanText((link.parentElement ?? link).textContent).replace(SHOW_MORE_TAIL, "").trim();
+		if (t.length >= MIN_TEXT) return t;
+	}
+	const parts = [];
+	for (const node of langCaptionNodes(article, allowNested)) parts.push(cleanText(node.textContent));
+	parts.sort((a, b) => b.length - a.length);
+	return parts[0] ?? "";
+}
+function langCaptionNodes(article, allowNested) {
+	const out = [];
+	for (const node of queryDeep(article, "div[lang], span[lang]")) {
+		if (!allowNested && !belongsToArticle(node, article)) continue;
+		if (node.closest("[data-testid=\"User-Name\"], [data-testid=\"socialContext\"], [role=\"group\"]")) continue;
+		if (node.getAttribute("data-testid") === "tweetText") continue;
+		const t = cleanText(node.textContent);
+		if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
+		out.push(node);
+	}
+	return out;
+}
 function ownTweetId(article) {
-	const own = collectTweetId(article, false);
-	if (own) return own;
-	if (isRetweetCard(article) || nestedTweetCards(article).length > 0) return collectTweetId(article, true);
-	return null;
+	return collectTweetId(article, false) ?? collectTweetId(article, true) ?? collectIdAround(article);
 }
 function collectTweetId(article, allowNested) {
 	const timeLink = queryDeep(article, "time")[0]?.closest("a");
@@ -117,13 +150,33 @@ function collectTweetId(article, allowNested) {
 	}
 	return null;
 }
+/** Media cards often move /status/:id to a cell overlay or a wrapping <a>. */
+function collectIdAround(article) {
+	const wrap = article.closest("a[href*=\"/status/\"]");
+	if (wrap instanceof HTMLElement) {
+		const id = tweetIdFromHref(wrap.getAttribute("href") ?? "");
+		if (id) return id;
+	}
+	const scope = article.closest("[data-testid=\"cellInnerDiv\"]") ?? article.parentElement;
+	if (!scope) return null;
+	const timeLink = queryDeep(scope, "time")[0]?.closest("a");
+	if (timeLink) {
+		const id = tweetIdFromHref(timeLink.getAttribute("href") ?? "");
+		if (id) return id;
+	}
+	for (const a of queryDeep(scope, "a[href*=\"/status/\"]")) {
+		const id = tweetIdFromHref(a.getAttribute("href") ?? "");
+		if (id) return id;
+	}
+	return null;
+}
 function ownHandle(article) {
 	for (const a of queryDeep(article, "[data-testid=\"User-Name\"] a[href^=\"/\"]")) {
 		if (!belongsToArticle(a, article)) continue;
 		const handle = (a.getAttribute("href") ?? "").replace(/^\//, "").split("/")[0];
 		if (handle && handle !== "i") return `@${handle}`;
 	}
-	if (isRetweetCard(article) || nestedTweetCards(article).length > 0) for (const a of queryDeep(article, "a[href^=\"/\"]")) {
+	for (const a of queryDeep(article, "[data-testid=\"User-Name\"] a[href^=\"/\"], a[href^=\"/\"]")) {
 		const href = a.getAttribute("href") ?? "";
 		if (href.includes("/status/")) continue;
 		const handle = href.replace(/^\//, "").split("/")[0];
@@ -140,21 +193,57 @@ function belongsToArticle(node, article) {
 	return tweetCardOwner(node) === article;
 }
 function tweetCardOwner(node) {
-	const owner = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
-	return owner instanceof HTMLElement ? owner : null;
+	let scope = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
+	while (scope) {
+		if (scope.getAttribute("data-testid") === "tweet" && !isMediaHusk(scope)) return scope;
+		if (scope.getAttribute("data-testid") === "cellInnerDiv" && realTweetCards(scope).length === 0) return scope;
+		const parent = scope.parentElement;
+		scope = parent ? parent.closest("[data-testid=\"tweet\"]") ?? parent.closest("[data-testid=\"cellInnerDiv\"]") : null;
+	}
+	const fallback = node.closest("[data-testid=\"tweet\"]") ?? node.closest("[data-testid=\"cellInnerDiv\"]");
+	return fallback instanceof HTMLElement ? fallback : null;
+}
+function hasOwnAuthor(article) {
+	for (const node of article.querySelectorAll("[data-testid=\"User-Name\"]")) {
+		if (!(node instanceof HTMLElement)) continue;
+		const owner = node.closest("[data-testid=\"tweet\"]");
+		if (owner === article) return true;
+		if (!owner && article.getAttribute("data-testid") === "cellInnerDiv") return true;
+	}
+	return false;
+}
+/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. */
+function isMediaHusk(el) {
+	return el.getAttribute("data-testid") === "tweet" && !hasOwnAuthor(el);
+}
+function cleanText(value) {
+	return (value ?? "").replace(/\s+/g, " ").trim();
+}
+function usableText(value) {
+	const t = cleanText(value);
+	return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+}
+function syntheticId(handle, text) {
+	const who = handle.replace(/^@/, "") || "anon";
+	let h = 0;
+	for (let i = 0; i < text.length; i += 1) h = h * 31 + text.charCodeAt(i) | 0;
+	return `x-${who}-${Math.abs(h)}`;
 }
 function nestedTweetCards(article) {
 	return queryDeep(article, "[data-testid=\"tweet\"]").filter((node) => node !== article);
 }
+function realTweetCards(root) {
+	return queryDeep(root, "[data-testid=\"tweet\"]").filter((node) => !isMediaHusk(node));
+}
 function articlesFromCells(root) {
 	const out = [];
 	for (const cell of queryDeep(root, "[data-testid=\"cellInnerDiv\"]")) {
-		const nested = queryDeep(cell, "[data-testid=\"tweet\"]");
-		if (nested.length > 0) {
-			out.push(...nested);
+		const real = realTweetCards(cell);
+		if (real.length > 0) {
+			out.push(...real);
 			continue;
 		}
-		if (queryDeep(cell, "[data-testid=\"tweetText\"]").length > 0) out.push(cell);
+		if (queryDeep(cell, "[data-testid=\"tweetText\"]").length > 0 || queryDeep(cell, "[data-testid=\"User-Name\"]").length > 0 || langCaptionNodes(cell, true).length > 0) out.push(cell);
 	}
 	return out;
 }

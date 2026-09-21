@@ -50,7 +50,15 @@ export function runTimelineGuard(
       const state = article.getAttribute('data-slop-guard');
       if (!state) return;
       const item = adapter.extract(article);
-      if (!item) return;
+      if (!item) {
+        if (state === 'pending') {
+          const started = Number(article.dataset.slopPendingAt ?? 0);
+          if (started && Date.now() - started > PENDING_MS && !inFlightArticles.has(article)) {
+            slopFeed.reset(article);
+          }
+        }
+        return;
+      }
       if (article.dataset.slopId && article.dataset.slopId !== item.id) {
         slopFeed.reset(article);
         return;
