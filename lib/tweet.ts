@@ -11,6 +11,8 @@ const REPOST_RE =
 const SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 const SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 const MIN_TEXT = 4;
+const MEDIA_CHROME =
+  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"]';
 
 export function tweetIdFromHref(href: string): string | null {
   const match = href.match(STATUS_RE);
@@ -87,16 +89,20 @@ export function isRetweetCard(article: HTMLElement): boolean {
   return false;
 }
 
-/** Own tweetText first; then lang-caption; retweet shells fall back to nested. */
+/** Own tweetText first; then lang-caption; retweet shells fall back to nested. Never a node inside the player. */
 export function findTweetTextEl(article: HTMLElement): HTMLElement | null {
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
-    if (belongsToArticle(node, article) && usableText(node.textContent)) return node;
+    if (belongsToArticle(node, article) && usableText(node.textContent) && !inMediaChrome(node)) return node;
   }
-  for (const node of langCaptionNodes(article, false)) return node;
+  for (const node of langCaptionNodes(article, false)) {
+    if (!inMediaChrome(node)) return node;
+  }
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
-    if (usableText(node.textContent)) return node;
+    if (usableText(node.textContent) && !inMediaChrome(node)) return node;
   }
-  for (const node of langCaptionNodes(article, true)) return node;
+  for (const node of langCaptionNodes(article, true)) {
+    if (!inMediaChrome(node)) return node;
+  }
   return null;
 }
 
@@ -134,6 +140,7 @@ function collectTweetText(article: HTMLElement, allowNested: boolean): string {
   const parts: string[] = [];
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
     if (!allowNested && !belongsToArticle(node, article)) continue;
+    if (inMediaChrome(node)) continue;
     const t = cleanText(node.textContent);
     if (SHOW_MORE_RE.test(t)) continue;
     if (allowNested) {
@@ -164,7 +171,9 @@ function langCaptionNodes(article: HTMLElement, allowNested: boolean): HTMLEleme
   const out: HTMLElement[] = [];
   for (const node of queryDeep(article, 'div[lang], span[lang]')) {
     if (!allowNested && !belongsToArticle(node, article)) continue;
-    if (node.closest('[data-testid="User-Name"], [data-testid="socialContext"], [role="group"]')) continue;
+    // X wraps the whole card in role=group (plus a nested action bar). Only skip chrome.
+    if (node.closest('[data-testid="User-Name"], [data-testid="socialContext"]')) continue;
+    if (inMediaChrome(node)) continue;
     if (node.getAttribute('data-testid') === 'tweetText') continue;
     const t = cleanText(node.textContent);
     if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
@@ -182,11 +191,13 @@ function ownTweetId(article: HTMLElement): string | null {
 }
 
 function collectTweetId(article: HTMLElement, allowNested: boolean): string | null {
-  const time = queryDeep(article, 'time')[0];
-  const timeLink = time?.closest('a');
-  if (timeLink && (allowNested || belongsToArticle(timeLink, article))) {
-    const id = tweetIdFromHref(timeLink.getAttribute('href') ?? '');
-    if (id) return id;
+  for (const time of queryDeep(article, 'time')) {
+    if (isDurationTime(time)) continue;
+    const timeLink = time.closest('a');
+    if (timeLink && (allowNested || belongsToArticle(timeLink, article))) {
+      const id = tweetIdFromHref(timeLink.getAttribute('href') ?? '');
+      if (id) return id;
+    }
   }
   for (const a of queryDeep(article, 'a[href*="/status/"]')) {
     if (!allowNested && !belongsToArticle(a, article)) continue;
@@ -205,9 +216,10 @@ function collectIdAround(article: HTMLElement): string | null {
   }
   const scope = article.closest('[data-testid="cellInnerDiv"]') ?? article.parentElement;
   if (!scope) return null;
-  const time = queryDeep(scope, 'time')[0];
-  const timeLink = time?.closest('a');
-  if (timeLink) {
+  for (const time of queryDeep(scope, 'time')) {
+    if (isDurationTime(time)) continue;
+    const timeLink = time.closest('a');
+    if (!timeLink) continue;
     const id = tweetIdFromHref(timeLink.getAttribute('href') ?? '');
     if (id) return id;
   }
@@ -276,6 +288,16 @@ function cleanText(value: string | null | undefined): string {
 function usableText(value: string | null | undefined): boolean {
   const t = cleanText(value);
   return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+}
+
+function inMediaChrome(node: Element): boolean {
+  return Boolean(node.closest(MEDIA_CHROME));
+}
+
+function isDurationTime(el: HTMLElement): boolean {
+  const dt = el.getAttribute('datetime') ?? '';
+  if (/^PT/i.test(dt)) return true;
+  return /^\d+:\d{2}(:\d{2})?$/.test(cleanText(el.textContent));
 }
 
 function syntheticId(handle: string, text: string): string {
