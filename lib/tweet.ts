@@ -12,7 +12,9 @@ const SHOW_MORE_RE = /^(Show more|Mostrar más|Mostrar mas)$/i;
 const SHOW_MORE_TAIL = /\s*(Show more|Mostrar más|Mostrar mas)\s*$/i;
 const MIN_TEXT = 4;
 const MEDIA_CHROME =
-  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"]';
+  '[data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"], [data-testid="previewInterstitial"], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]';
+const PLAYER_OVERLAY_RE = /^(Original|AI|GIF|Play|Pause|Video|Live)$/i;
+const CAPTION_SEL = 'div[lang], span[lang], div[dir="auto"], span[dir="auto"]';
 
 export function tweetIdFromHref(href: string): string | null {
   const match = href.match(STATUS_RE);
@@ -96,7 +98,7 @@ export function isRetweetCard(article: HTMLElement): boolean {
   return false;
 }
 
-/** Own tweetText first; then lang-caption; retweet shells fall back to nested. Never a node inside the player. */
+/** Own tweetText first; then lang/dir=auto caption; retweet shells fall back to nested. Never a node inside the player. */
 export function findTweetTextEl(article: HTMLElement): HTMLElement | null {
   for (const node of queryDeep(article, '[data-testid="tweetText"]')) {
     if (belongsToArticle(node, article) && usableText(node.textContent) && !inMediaChrome(node)) return node;
@@ -110,7 +112,7 @@ export function findTweetTextEl(article: HTMLElement): HTMLElement | null {
   for (const node of langCaptionNodes(article, true)) {
     if (!inMediaChrome(node)) return node;
   }
-  return null;
+  return labelledByNode(article, true);
 }
 
 export function findActionBar(article: HTMLElement): HTMLElement | null {
@@ -118,7 +120,14 @@ export function findActionBar(article: HTMLElement): HTMLElement | null {
     for (const el of queryDeep(article, `[data-testid="${testid}"]`)) {
       if (!belongsToArticle(el, article)) continue;
       const group = el.closest('[role="group"]');
-      if (group instanceof HTMLElement && belongsToArticle(group, article)) return group;
+      // Card-level role=group also wraps User-Name + media; only the inner action cluster.
+      if (
+        group instanceof HTMLElement &&
+        belongsToArticle(group, article) &&
+        !group.querySelector('[data-testid="User-Name"]')
+      ) {
+        return group;
+      }
       return el;
     }
   }
@@ -149,7 +158,7 @@ function collectTweetText(article: HTMLElement, allowNested: boolean): string {
     if (!allowNested && !belongsToArticle(node, article)) continue;
     if (inMediaChrome(node)) continue;
     const t = cleanText(node.textContent);
-    if (SHOW_MORE_RE.test(t)) continue;
+    if (SHOW_MORE_RE.test(t) || PLAYER_OVERLAY_RE.test(t)) continue;
     if (allowNested) {
       if (t.length >= MIN_TEXT) return t;
       continue;
@@ -171,29 +180,60 @@ function collectFallbackText(article: HTMLElement, allowNested: boolean): string
     parts.push(cleanText(node.textContent));
   }
   parts.sort((a, b) => b.length - a.length);
-  return parts[0] ?? '';
+  return parts[0] || labelledByText(article, allowNested);
 }
 
 function langCaptionNodes(article: HTMLElement, allowNested: boolean): HTMLElement[] {
   const out: HTMLElement[] = [];
-  for (const node of queryDeep(article, 'div[lang], span[lang]')) {
+  for (const node of queryDeep(article, CAPTION_SEL)) {
     if (!allowNested && !belongsToArticle(node, article)) continue;
     // X wraps the whole card in role=group (plus a nested action bar). Only skip chrome.
     if (node.closest('[data-testid="User-Name"], [data-testid="socialContext"]')) continue;
     if (inMediaChrome(node)) continue;
     if (node.getAttribute('data-testid') === 'tweetText') continue;
     const t = cleanText(node.textContent);
-    if (!t || SHOW_MORE_RE.test(t) || t.length < MIN_TEXT) continue;
+    if (!t || SHOW_MORE_RE.test(t) || PLAYER_OVERLAY_RE.test(t) || t.length < MIN_TEXT) continue;
     out.push(node);
   }
   return out;
 }
 
+function labelledByNode(article: HTMLElement, allowNested: boolean): HTMLElement | null {
+  const ids = new Set<string>();
+  const labelled = [article, ...queryDeep(article, '[aria-labelledby]')];
+  for (const el of labelled) {
+    if (!allowNested && el !== article && !belongsToArticle(el, article)) continue;
+    for (const id of (el.getAttribute('aria-labelledby') ?? '').split(/\s+/)) {
+      if (id) ids.add(id);
+    }
+  }
+  let best: HTMLElement | null = null;
+  let bestLen = 0;
+  for (const id of ids) {
+    const node = article.querySelector(`[id="${id}"]`) ?? document.getElementById(id);
+    if (!(node instanceof HTMLElement)) continue;
+    if (!allowNested && !belongsToArticle(node, article)) continue;
+    if (node.closest('[data-testid="User-Name"], [data-testid="socialContext"]')) continue;
+    if (inMediaChrome(node)) continue;
+    const t = cleanText(node.textContent);
+    if (!usableText(t)) continue;
+    if (t.length > bestLen) {
+      best = node;
+      bestLen = t.length;
+    }
+  }
+  return best;
+}
+
+function labelledByText(article: HTMLElement, allowNested: boolean): string {
+  return cleanText(labelledByNode(article, allowNested)?.textContent);
+}
+
 function ownTweetId(article: HTMLElement): string | null {
   return (
     collectTweetId(article, false) ??
-    collectTweetId(article, true) ??
-    collectIdAround(article)
+    collectIdAround(article) ??
+    collectTweetId(article, true)
   );
 }
 
@@ -223,14 +263,19 @@ function collectIdAround(article: HTMLElement): string | null {
   }
   const scope = article.closest('[data-testid="cellInnerDiv"]') ?? article.parentElement;
   if (!scope) return null;
+  const ownLink = (a: HTMLElement): boolean => {
+    const owner = tweetCardOwner(a);
+    return !owner || owner === article || owner === scope;
+  };
   for (const time of queryDeep(scope, 'time')) {
     if (isDurationTime(time)) continue;
     const timeLink = time.closest('a');
-    if (!timeLink) continue;
+    if (!timeLink || !ownLink(timeLink)) continue;
     const id = tweetIdFromHref(timeLink.getAttribute('href') ?? '');
     if (id) return id;
   }
   for (const a of queryDeep(scope, 'a[href*="/status/"]')) {
+    if (!ownLink(a)) continue;
     const id = tweetIdFromHref(a.getAttribute('href') ?? '');
     if (id) return id;
   }
@@ -283,9 +328,11 @@ function hasOwnAuthor(article: HTMLElement): boolean {
   return false;
 }
 
-/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. */
+/** Inner [data-testid=tweet] wrappers around GIF/video — not a quoted post. Face-cam overlays sit inside the player and may carry User-Name. */
 function isMediaHusk(el: HTMLElement): boolean {
-  return el.getAttribute('data-testid') === 'tweet' && !hasOwnAuthor(el);
+  if (el.getAttribute('data-testid') !== 'tweet') return false;
+  if (el.parentElement && el.closest(MEDIA_CHROME)) return true;
+  return !hasOwnAuthor(el);
 }
 
 function cleanText(value: string | null | undefined): string {
@@ -294,11 +341,18 @@ function cleanText(value: string | null | undefined): string {
 
 function usableText(value: string | null | undefined): boolean {
   const t = cleanText(value);
-  return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t);
+  return t.length >= MIN_TEXT && !SHOW_MORE_RE.test(t) && !PLAYER_OVERLAY_RE.test(t);
 }
 
-function inMediaChrome(node: Element): boolean {
-  return Boolean(node.closest(MEDIA_CHROME));
+export function inMediaChrome(node: Element): boolean {
+  if (node.closest(MEDIA_CHROME)) return true;
+  // Walk out of video player shadow roots (linkedom has no ShadowRoot).
+  let root: { host?: Element } = node.getRootNode() as { host?: Element };
+  while (root.host instanceof Element) {
+    if (root.host.matches(MEDIA_CHROME) || root.host.closest(MEDIA_CHROME)) return true;
+    root = root.host.getRootNode() as { host?: Element };
+  }
+  return false;
 }
 
 function isDurationTime(el: HTMLElement): boolean {
@@ -328,6 +382,7 @@ function articlesFromCells(root: ParentNode): HTMLElement[] {
     const real = realTweetCards(cell);
     if (real.length > 0) {
       out.push(...real);
+      if (hasOwnTweetBody(cell) && !real.includes(cell)) out.push(cell);
       continue;
     }
     if (

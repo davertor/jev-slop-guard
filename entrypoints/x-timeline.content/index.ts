@@ -1,6 +1,6 @@
 import '../../lib/badge.css';
 import { runTimelineGuard } from '../../lib/timeline-guard';
-import { extractTweet, listTweetArticles } from '../../lib/tweet';
+import { explainExtract, extractTweet, listTweetArticles } from '../../lib/tweet';
 import { chromeApi } from '../../lib/chrome-msg';
 import type { XStatusResult } from '../../lib/messages';
 
@@ -30,8 +30,22 @@ export default defineContentScript({
 function xStatus(): XStatusResult {
   const cards = listTweetArticles();
   let ready = 0;
-  for (const card of cards) if (extractTweet(card)) ready += 1;
-  return { ok: true, live: true, cards: cards.length, ready };
+  const missCounts = new Map<string, number>();
+  for (const card of cards) {
+    const info = explainExtract(card);
+    if (info.ok) ready += 1;
+    else {
+      missCounts.set(info.reason, (missCounts.get(info.reason) ?? 0) + 1);
+      console.debug('[slop-guard] extract', info.reason, card);
+    }
+  }
+  return {
+    ok: true,
+    live: true,
+    cards: cards.length,
+    ready,
+    miss: [...missCounts].map(([reason, n]) => `${n} ${reason}`).join(', '),
+  };
 }
 
 const PROBE_STYLE: Partial<CSSStyleDeclaration> = {
@@ -53,8 +67,10 @@ const PROBE_STYLE: Partial<CSSStyleDeclaration> = {
 };
 
 function showXProbe(): void {
-  const { cards, ready } = xStatus();
-  const text = `X script live · ${cards} cards · ${ready} ready`;
+  const { cards, ready, miss } = xStatus();
+  const text = miss
+    ? `X script live · ${cards} cards · ${ready} ready · ${miss}`
+    : `X script live · ${cards} cards · ${ready} ready`;
   let chip = document.getElementById('slop-guard-xprobe');
   if (!(chip instanceof HTMLElement)) {
     chip = document.createElement('div');
