@@ -1,5 +1,5 @@
 import type { Settings } from './settings';
-import { belongsToArticle, findActionBar, findTweetTextEl, queryDeep } from './tweet';
+import { belongsToArticle, findActionBar, findTweetTextEl, inMediaChrome, queryDeep } from './tweet';
 import { badgeCopy, shouldStamp, type Verdict } from './verdict';
 
 export const BADGE_ATTR = 'data-slop-guard';
@@ -82,30 +82,28 @@ function ownOverlay(article: HTMLElement): HTMLElement | null {
 }
 
 function insertBadgeRow(article: HTMLElement, row: HTMLElement): void {
+  const place = (target: Element | null, where: InsertPosition): boolean => {
+    if (!target) return false;
+    target.insertAdjacentElement(where, row);
+    if (!inMediaChrome(row)) return true;
+    row.remove();
+    return false;
+  };
+
   const tweetText = findTweetTextEl(article);
-  if (tweetText && belongsToArticle(tweetText, article)) {
-    tweetText.insertAdjacentElement('afterend', row);
+  if (tweetText && belongsToArticle(tweetText, article) && !inMediaChrome(tweetText) && place(tweetText, 'afterend')) {
     return;
   }
-  const actions = findActionBar(article);
-  if (actions) {
-    actions.insertAdjacentElement('beforebegin', row);
-    return;
-  }
-  const nested = queryDeep(article, '[data-testid="tweet"]').find((node) => node !== article);
-  if (nested) {
-    nested.insertAdjacentElement('afterend', row);
-    return;
-  }
-  if (tweetText) {
-    tweetText.insertAdjacentElement('afterend', row);
-    return;
-  }
-  const media = article.querySelector(
-    '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="card.wrapper"]',
+  if (place(findActionBar(article), 'beforebegin')) return;
+  const nested = queryDeep(article, '[data-testid="tweet"]').find(
+    (node) => node !== article && !inMediaChrome(node),
   );
-  if (media) media.insertAdjacentElement('beforebegin', row);
-  else article.append(row);
+  if (place(nested ?? null, 'afterend')) return;
+  const media = article.querySelector(
+    '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="previewInterstitial"], [data-testid="card.wrapper"]',
+  );
+  if (place(media, 'beforebegin')) return;
+  article.append(row);
 }
 
 function upsertBadge(article: HTMLElement, text: string, tone: string, dot: boolean): void {
