@@ -10,7 +10,7 @@ export default defineConfig({
   manifest: {
     name: 'Slop Guard',
     description:
-      'Real-time slop detector for X and LinkedIn: Not slop / Stop badges, blur, and a SLOP stamp.',
+      'Real-time slop detector for X and LinkedIn: Slop / Stop badges, blur, and a SLOP stamp.',
     permissions: ['storage', 'scripting', 'tabs'],
     host_permissions: [
       'https://x.com/*',
