@@ -88,20 +88,48 @@ function ownOverlay(article: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function isLinkedInHost(): boolean {
+  try {
+    return /(^|\.)linkedin\.com$/i.test(location.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isLinkedInCard(article: HTMLElement): boolean {
+  // Content script runs on linkedin.com — always treat cards as LI even when
+  // LinkedIn drops data-urn / feed-shared-update-v2 on newer FeedType rows.
+  if (isLinkedInHost()) return true;
+  const ck = article.getAttribute('componentkey') ?? '';
   return (
     article.hasAttribute('data-urn') ||
     article.hasAttribute('data-id') ||
     article.classList.contains('feed-shared-update-v2') ||
     article.classList.contains('occludable-update') ||
+    /FeedType_/i.test(ck) ||
+    article.hasAttribute('data-finite-scroll-hotkey-item') ||
     !!article.querySelector(
-      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity',
+      '.social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, button[aria-label*="Recomendar"], button[aria-label*="Like"]',
     )
   );
 }
 
-/** Keep LinkedIn badge pinned as the first child (top of the card). */
+/** Keep LinkedIn badge pinned at the visual top-left of the card. */
 export function placeLinkedInBadge(article: HTMLElement, row: HTMLElement): void {
+  // Inline styles beat LinkedIn's feed CSS and work when class selectors miss.
+  if (article.style.position !== 'absolute' && article.style.position !== 'fixed') {
+    article.style.position = 'relative';
+  }
+  row.style.setProperty('position', 'absolute', 'important');
+  row.style.setProperty('top', '8px', 'important');
+  row.style.setProperty('left', '12px', 'important');
+  row.style.setProperty('right', 'auto', 'important');
+  row.style.setProperty('bottom', 'auto', 'important');
+  row.style.setProperty('z-index', '2147483000', 'important');
+  row.style.setProperty('margin', '0', 'important');
+  row.style.setProperty('padding', '0', 'important');
+  row.style.setProperty('display', 'flex', 'important');
+  row.style.setProperty('pointer-events', 'none', 'important');
   if (article.firstElementChild !== row) article.prepend(row);
   row.dataset.slopLiPlacement = 'top';
 }
@@ -168,7 +196,10 @@ function upsertBadge(article: HTMLElement, text: string, tone: string, dot: bool
     badge.append(mark);
   }
   badge.append(document.createTextNode(text));
-  badge.title = text;
+  const preview = article.dataset.slopTextPreview?.trim();
+  badge.title = preview ? `${text}\n——\n${preview}` : text;
+  const badgeEl = row.querySelector<HTMLElement>(`.${BADGE_CLASS}`);
+  if (badgeEl) badgeEl.style.pointerEvents = 'auto';
 }
 
 function stampArticle(article: HTMLElement, onPutBack: () => void): void {
