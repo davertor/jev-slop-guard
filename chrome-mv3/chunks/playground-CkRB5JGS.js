@@ -453,11 +453,31 @@ function ownOverlay(article) {
 	for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
 	return null;
 }
-function isLinkedInCard(article) {
-	return article.hasAttribute("data-urn") || article.hasAttribute("data-id") || article.classList.contains("feed-shared-update-v2") || article.classList.contains("occludable-update") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity");
+function isLinkedInHost() {
+	try {
+		return /(^|\.)linkedin\.com$/i.test(location.hostname);
+	} catch {
+		return false;
+	}
 }
-/** Keep LinkedIn badge pinned as the first child (top of the card). */
+function isLinkedInCard(article) {
+	if (isLinkedInHost()) return true;
+	const ck = article.getAttribute("componentkey") ?? "";
+	return article.hasAttribute("data-urn") || article.hasAttribute("data-id") || article.classList.contains("feed-shared-update-v2") || article.classList.contains("occludable-update") || /FeedType_/i.test(ck) || article.hasAttribute("data-finite-scroll-hotkey-item") || !!article.querySelector(".social-details-social-activity, .feed-shared-social-action-bar, .update-v2-social-activity, button[aria-label*=\"Recomendar\"], button[aria-label*=\"Like\"]");
+}
+/** Keep LinkedIn badge pinned at the visual top-left of the card. */
 function placeLinkedInBadge(article, row) {
+	if (article.style.position !== "absolute" && article.style.position !== "fixed") article.style.position = "relative";
+	row.style.setProperty("position", "absolute", "important");
+	row.style.setProperty("top", "8px", "important");
+	row.style.setProperty("left", "12px", "important");
+	row.style.setProperty("right", "auto", "important");
+	row.style.setProperty("bottom", "auto", "important");
+	row.style.setProperty("z-index", "2147483000", "important");
+	row.style.setProperty("margin", "0", "important");
+	row.style.setProperty("padding", "0", "important");
+	row.style.setProperty("display", "flex", "important");
+	row.style.setProperty("pointer-events", "none", "important");
 	if (article.firstElementChild !== row) article.prepend(row);
 	row.dataset.slopLiPlacement = "top";
 }
@@ -507,7 +527,10 @@ function upsertBadge(article, text, tone, dot) {
 		badge.append(mark);
 	}
 	badge.append(document.createTextNode(text));
-	badge.title = text;
+	const preview = article.dataset.slopTextPreview?.trim();
+	badge.title = preview ? `${text}\n——\n${preview}` : text;
+	const badgeEl = row.querySelector(`.${BADGE_CLASS}`);
+	if (badgeEl) badgeEl.style.pointerEvents = "auto";
 }
 function stampArticle(article, onPutBack) {
 	article.classList.add("slop-guard-stamped");
