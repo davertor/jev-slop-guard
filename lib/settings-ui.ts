@@ -1,4 +1,4 @@
-import { chromeApi, isXUrl, sendRuntimeMessage, sendTabMessage } from './chrome-msg';
+import { chromeApi, isLinkedInUrl, isXUrl, sendRuntimeMessage, sendTabMessage } from './chrome-msg';
 import type { InjectXResult, JudgeResult, XStatusResult } from './messages';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './settings';
 
@@ -229,12 +229,50 @@ async function refreshXStatus(el: HTMLElement): Promise<void> {
     return;
   }
   const [tab] = tabs;
-  if (!tab?.id || !isXUrl(tab.url)) {
-    paintXStatus(el, 'idle', 'Open x.com to attach the timeline script.');
+  if (!tab?.id) {
+    paintXStatus(el, 'idle', 'Open x.com or linkedin.com to attach the feed script.');
     return;
   }
 
   const tabId = tab.id;
+  if (isLinkedInUrl(tab.url)) {
+    const pingLi = async () => {
+      try {
+        const result = await sendTabMessage<{ ok?: boolean; live?: boolean; cards?: number; ready?: number }>(
+          tabId,
+          { type: 'LI_STATUS' },
+        );
+        return result?.ok && result.live ? result : null;
+      } catch {
+        return null;
+      }
+    };
+    let status = await pingLi();
+    if (!status) {
+      try {
+        await sendRuntimeMessage<InjectXResult>({ type: 'INJECT_LI', tabId });
+      } catch {
+        // ignore
+      }
+      status = await pingLi();
+    }
+    if (status) {
+      paintXStatus(
+        el,
+        'live',
+        `LI script live · ${status.cards ?? 0} cards · ${status.ready ?? 0} ready`,
+      );
+      return;
+    }
+    paintXStatus(el, 'missing', 'LI script missing — Reload the extension, then reload LinkedIn.');
+    return;
+  }
+
+  if (!isXUrl(tab.url)) {
+    paintXStatus(el, 'idle', 'Open x.com or linkedin.com to attach the feed script.');
+    return;
+  }
+
   const ping = async (): Promise<XStatusResult | null> => {
     try {
       const result = await sendTabMessage<XStatusResult>(tabId, { type: 'X_STATUS' });

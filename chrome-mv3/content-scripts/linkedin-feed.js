@@ -4,6 +4,24 @@
 		return definition;
 	}
 	//#endregion
+	//#region lib/chrome-msg.ts
+	function chromeApi() {
+		const root = globalThis;
+		const api = root.chrome?.runtime ? root.chrome : root.browser;
+		if (!api?.runtime) throw new Error("chrome extension API unavailable");
+		return api;
+	}
+	function sendRuntimeMessage(message) {
+		return new Promise((resolve, reject) => {
+			const api = chromeApi();
+			api.runtime.sendMessage(message, (response) => {
+				const err = api.runtime.lastError;
+				if (err) reject(new Error(err.message));
+				else resolve(response);
+			});
+		});
+	}
+	//#endregion
 	//#region lib/linkedin.ts
 	/** Prefer concrete activity cards; fall back to newer FeedType rows. */
 	var PRIMARY_CARD_SELECTORS = [
@@ -26,6 +44,8 @@
 	var TEXT_SELECTORS = [
 		".update-components-text",
 		".feed-shared-update-v2__commentary",
+		".feed-shared-update-v2__description",
+		".feed-shared-text",
 		".feed-shared-inline-show-more-text",
 		".update-components-update-v2__commentary",
 		"[data-test-id=\"main-feed-activity-card__commentary\"]",
@@ -42,8 +62,10 @@
 	function listLinkedInArticles(root = document) {
 		const primary = queryAll(root, PRIMARY_CARD_SELECTORS);
 		return dropNested(primary.length > 0 ? primary : queryAll(root, FEED_ROW_SELECTORS)).filter((el) => {
-			const h = el.getBoundingClientRect().height;
-			return h > 80 && h < window.innerHeight * 2.5;
+			const rectH = el.getBoundingClientRect().height;
+			const h = rectH > 0 ? rectH : el.offsetHeight || 0;
+			if (h === 0) return true;
+			return h > 80 && h < Math.max(window.innerHeight, 600) * 2.5;
 		});
 	}
 	function extractLinkedInPost(article) {
@@ -404,24 +426,6 @@
 		ownOverlay(article)?.remove();
 	}
 	//#endregion
-	//#region lib/chrome-msg.ts
-	function chromeApi() {
-		const root = globalThis;
-		const api = root.chrome?.runtime ? root.chrome : root.browser;
-		if (!api?.runtime) throw new Error("chrome extension API unavailable");
-		return api;
-	}
-	function sendRuntimeMessage(message) {
-		return new Promise((resolve, reject) => {
-			const api = chromeApi();
-			api.runtime.sendMessage(message, (response) => {
-				const err = api.runtime.lastError;
-				if (err) reject(new Error(err.message));
-				else resolve(response);
-			});
-		});
-	}
-	//#endregion
 	//#region lib/queue.ts
 	function debounce(fn, ms) {
 		let timer;
@@ -691,6 +695,10 @@
 		matches: ["https://www.linkedin.com/*", "https://linkedin.com/*"],
 		runAt: "document_idle",
 		main(ctx) {
+			chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+				const type = message?.type;
+				if (type === "PING" || type === "LI_STATUS") sendResponse(liStatus());
+			});
 			showLiProbe();
 			const tick = window.setInterval(() => showLiProbe(), 2e3);
 			ctx.onInvalidated(() => window.clearInterval(tick));
@@ -702,20 +710,27 @@
 			});
 		}
 	});
-	function showLiProbe() {
+	function liStatus() {
 		const cards = listLinkedInArticles();
-		let extractable = 0;
-		for (const c of cards) if (extractLinkedInPost(c)) extractable += 1;
+		let ready = 0;
+		for (const c of cards) if (extractLinkedInPost(c)) ready += 1;
+		return {
+			ok: true,
+			live: true,
+			cards: cards.length,
+			ready
+		};
+	}
+	function showLiProbe() {
+		const { cards, ready } = liStatus();
 		let bar = document.querySelector(".slop-guard-liprobe");
 		if (!bar) {
 			bar = document.createElement("div");
 			bar.className = "slop-guard-liprobe slop-guard-modelbar";
-			bar.style.left = "12px";
-			bar.style.bottom = "40px";
-			bar.style.background = "#553011";
+			bar.style.cssText = "position:fixed;left:12px;bottom:40px;z-index:2147483646;padding:6px 10px;border-radius:999px;background:#553011;color:#fff;font:12px/1.3 system-ui,sans-serif;pointer-events:none;";
 			document.body.append(bar);
 		}
-		bar.textContent = `Slop Guard LI · cards ${cards.length} · ready ${extractable}`;
+		bar.textContent = `Slop Guard LI · cards ${cards} · ready ${ready}`;
 	}
 	//#endregion
 	//#region node_modules/.pnpm/wxt@0.21.4_esbuild@0.28.2_eslint@9.39.4_jiti@2.7.0__rolldown@1.2.9_typescript@5.9.3_vit_47c24954015f6262a28dfea2974a21a8/node_modules/wxt/dist/utils/internal/logger.mjs

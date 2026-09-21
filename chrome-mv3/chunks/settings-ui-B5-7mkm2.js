@@ -1,4 +1,4 @@
-import { a as chromeApi, c as sendTabMessage, n as loadSettings, o as isXUrl, r as saveSettings, s as sendRuntimeMessage, t as DEFAULT_SETTINGS } from "./settings-Ct9jgRFA.js";
+import { a as chromeApi, c as sendRuntimeMessage, l as sendTabMessage, n as loadSettings, o as isLinkedInUrl, r as saveSettings, s as isXUrl, t as DEFAULT_SETTINGS } from "./settings-DRS-MZ5q.js";
 //#region lib/settings-ui.ts
 var SETTINGS_FORM_HTML = `
   <header>
@@ -200,11 +200,41 @@ async function refreshXStatus(el) {
 		return;
 	}
 	const [tab] = tabs;
-	if (!tab?.id || !isXUrl(tab.url)) {
-		paintXStatus(el, "idle", "Open x.com to attach the timeline script.");
+	if (!tab?.id) {
+		paintXStatus(el, "idle", "Open x.com or linkedin.com to attach the feed script.");
 		return;
 	}
 	const tabId = tab.id;
+	if (isLinkedInUrl(tab.url)) {
+		const pingLi = async () => {
+			try {
+				const result = await sendTabMessage(tabId, { type: "LI_STATUS" });
+				return result?.ok && result.live ? result : null;
+			} catch {
+				return null;
+			}
+		};
+		let status = await pingLi();
+		if (!status) {
+			try {
+				await sendRuntimeMessage({
+					type: "INJECT_LI",
+					tabId
+				});
+			} catch {}
+			status = await pingLi();
+		}
+		if (status) {
+			paintXStatus(el, "live", `LI script live · ${status.cards ?? 0} cards · ${status.ready ?? 0} ready`);
+			return;
+		}
+		paintXStatus(el, "missing", "LI script missing — Reload the extension, then reload LinkedIn.");
+		return;
+	}
+	if (!isXUrl(tab.url)) {
+		paintXStatus(el, "idle", "Open x.com or linkedin.com to attach the feed script.");
+		return;
+	}
 	const ping = async () => {
 		try {
 			const result = await sendTabMessage(tabId, { type: "X_STATUS" });

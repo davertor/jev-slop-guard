@@ -1,5 +1,5 @@
-import "./settings-Ct9jgRFA.js";
-import { t as mountSettingsPage } from "./settings-ui-D-idM5jJ.js";
+import "./settings-DRS-MZ5q.js";
+import { t as mountSettingsPage } from "./settings-ui-B5-7mkm2.js";
 //#region entrypoints/options/main.ts
 document.body.style.maxWidth = "520px";
 document.body.style.margin = "24px auto";

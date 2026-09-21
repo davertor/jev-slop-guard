@@ -29,12 +29,23 @@ export type InjectXMessage = {
   tabId: number;
 };
 
+export type LiStatusMessage = {
+  type: 'LI_STATUS';
+};
+
+export type InjectLiMessage = {
+  type: 'INJECT_LI';
+  tabId: number;
+};
+
 export type ExtensionMessage =
   | JudgeTweetMessage
   | GetSettingsMessage
   | PingMessage
   | XStatusMessage
-  | InjectXMessage;
+  | InjectXMessage
+  | LiStatusMessage
+  | InjectLiMessage;
 
 export type XStatusResult = {
   ok: true;
@@ -44,12 +55,25 @@ export type XStatusResult = {
   miss?: string;
 };
 
+export type LiStatusResult = {
+  ok: true;
+  live: true;
+  cards: number;
+  ready: number;
+};
+
 export type InjectXResult = { ok: true } | { ok: false; error: string };
 
 export function isInjectXMessage(value: unknown): value is InjectXMessage {
   if (!value || typeof value !== 'object') return false;
   const msg = value as InjectXMessage;
   return msg.type === 'INJECT_X' && typeof msg.tabId === 'number';
+}
+
+export function isInjectLiMessage(value: unknown): value is InjectLiMessage {
+  if (!value || typeof value !== 'object') return false;
+  const msg = value as InjectLiMessage;
+  return msg.type === 'INJECT_LI' && typeof msg.tabId === 'number';
 }
 
 export type JudgeOk = { ok: true; verdict: Verdict };
