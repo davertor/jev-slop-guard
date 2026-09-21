@@ -53,7 +53,7 @@ At or above threshold: red **Stop \| NN%** (`slopP`).
 - Never blocks scroll; latency is visible on purpose (clean post → then badge)
 - Skips Promoted / `placementTracking` ads
 - Optional corner chip shows the resolved model (`Jev-latest`)
-- Home timeline probe chip (inline styles, next to Para ti / Siguiendo): `X script live · N cards · M ready`
+- Home timeline probe chip (inline styles, next to Para ti / Siguiendo): `X script live · N cards · M ready` (if extract fails: `· N no-text` / `promoted`; `console.debug('[slop-guard] extract', reason, card)`)
 - Background service worker injects the X content script into matching tabs (not manifest-only)
 - X / Twitter only
 
