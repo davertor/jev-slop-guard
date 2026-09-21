@@ -20,19 +20,26 @@ export function tweetIdFromHref(href: string): string | null {
 }
 
 export function extractTweet(article: HTMLElement): ExtractedTweet | null {
-  if (isPromoted(article)) return null;
+  return explainExtract(article).item;
+}
+
+/** Why extract failed — probe / console.debug. Reasons stay short. */
+export function explainExtract(article: HTMLElement): {
+  ok: boolean;
+  reason: string;
+  item: ExtractedTweet | null;
+} {
+  if (isPromoted(article)) return { ok: false, reason: 'promoted', item: null };
 
   const text = ownTweetText(article);
-  if (text.length < MIN_TEXT) return null;
+  if (text.length < MIN_TEXT) return { ok: false, reason: 'no-text', item: null };
 
   const handle = ownHandle(article);
   const id = ownTweetId(article) ?? syntheticId(handle, text);
-
   return {
-    id,
-    text: text.slice(0, 4000),
-    handle,
-    article,
+    ok: true,
+    reason: 'ok',
+    item: { id, text: text.slice(0, 4000), handle, article },
   };
 }
 
