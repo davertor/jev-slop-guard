@@ -450,7 +450,13 @@ function ownSlopRow(article) {
 	return null;
 }
 function ownOverlay(article) {
-	for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
+	for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) {
+		if (!(overlay instanceof HTMLElement)) continue;
+		if (belongsToArticle(overlay, article)) return overlay;
+		const nestedOwner = overlay.parentElement?.closest("[data-slop-guard]");
+		if (nestedOwner && nestedOwner !== article) continue;
+		if (article.contains(overlay) && !overlay.closest("[data-testid=\"tweet\"]")) return overlay;
+	}
 	return null;
 }
 function isLinkedInHost() {
@@ -549,18 +555,25 @@ function stampArticle(article, onPutBack) {
 		article.append(overlay);
 	}
 	const button = overlay.querySelector(".slop-guard-putback");
-	if (button instanceof HTMLButtonElement) button.onclick = (event) => {
-		event.preventDefault();
-		event.stopPropagation();
-		onPutBack();
-	};
+	if (button instanceof HTMLButtonElement) {
+		button.style.pointerEvents = "auto";
+		button.onclick = (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			onPutBack();
+		};
+	}
 }
 function clearBadge(article) {
 	ownSlopRow(article)?.remove();
 }
 function clearStamp(article) {
 	article.classList.remove("slop-guard-stamped");
-	ownOverlay(article)?.remove();
+	for (const overlay of [...article.querySelectorAll(`.${OVERLAY_CLASS}`)]) {
+		if (!(overlay instanceof HTMLElement)) continue;
+		if (belongsToArticle(overlay, article) || article.contains(overlay) && !overlay.closest("[data-testid=\"tweet\"]")) overlay.remove();
+	}
 }
 //#endregion
 //#region entrypoints/playground/main.ts

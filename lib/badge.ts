@@ -82,8 +82,13 @@ export function ownSlopRow(article: HTMLElement): HTMLElement | null {
 }
 
 function ownOverlay(article: HTMLElement): HTMLElement | null {
+  // Same LI caveat as ownSlopRow: belongsToArticle is X-only (data-testid=tweet).
   for (const overlay of article.querySelectorAll(`.${OVERLAY_CLASS}`)) {
-    if (overlay instanceof HTMLElement && belongsToArticle(overlay, article)) return overlay;
+    if (!(overlay instanceof HTMLElement)) continue;
+    if (belongsToArticle(overlay, article)) return overlay;
+    const nestedOwner = overlay.parentElement?.closest('[data-slop-guard]');
+    if (nestedOwner && nestedOwner !== article) continue;
+    if (article.contains(overlay) && !overlay.closest('[data-testid="tweet"]')) return overlay;
   }
   return null;
 }
@@ -220,9 +225,11 @@ function stampArticle(article: HTMLElement, onPutBack: () => void): void {
   }
   const button = overlay.querySelector('.slop-guard-putback');
   if (button instanceof HTMLButtonElement) {
+    button.style.pointerEvents = 'auto';
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      event.stopImmediatePropagation();
       onPutBack();
     };
   }
@@ -234,5 +241,11 @@ export function clearBadge(article: HTMLElement): void {
 
 export function clearStamp(article: HTMLElement): void {
   article.classList.remove('slop-guard-stamped');
-  ownOverlay(article)?.remove();
+  // Remove every owned overlay (LI can accumulate if an older build missed belongsToArticle).
+  for (const overlay of [...article.querySelectorAll(`.${OVERLAY_CLASS}`)]) {
+    if (!(overlay instanceof HTMLElement)) continue;
+    if (belongsToArticle(overlay, article) || (article.contains(overlay) && !overlay.closest('[data-testid="tweet"]'))) {
+      overlay.remove();
+    }
+  }
 }
