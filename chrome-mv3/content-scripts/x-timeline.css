@@ -1,0 +1,121 @@
+.slop-guard-card {
+  position: relative !important;
+}
+
+.slop-guard-row {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 4px 2px;
+}
+
+.slop-guard-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font: 650 12px/18px ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.slop-guard-badge[data-tone='ok'] {
+  color: #053321;
+  background: #00ba7c;
+}
+
+.slop-guard-badge[data-tone='stop'] {
+  color: #fff;
+  background: #f4212e;
+}
+
+.slop-guard-badge[data-tone='error'] {
+  color: #ffd0d0;
+  background: #3a1515;
+}
+
+.slop-guard-check {
+  font-weight: 800;
+}
+
+.slop-guard-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+.slop-guard-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(16px) saturate(0.4);
+  -webkit-backdrop-filter: blur(16px) saturate(0.4);
+}
+
+.slop-guard-stamp {
+  font: 900 clamp(48px, 12vw, 92px)/0.9 Impact, Haettenschweiler, sans-serif;
+  letter-spacing: 0.08em;
+  color: transparent;
+  -webkit-text-stroke: 5px #f4212e;
+  paint-order: stroke fill;
+  transform: rotate(-18deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+.slop-guard-putback {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: 650 12px/1 ui-sans-serif, system-ui, sans-serif;
+  color: #0f1419;
+  background: #fff;
+}
+
+.slop-guard-modelbar {
+  position: fixed;
+  z-index: 2147483646;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #0f1419;
+  color: #e7e9ea;
+  font: 650 11px/16px ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.slop-guard-banner {
+  position: fixed;
+  z-index: 2147483646;
+  left: 16px;
+  right: 16px;
+  bottom: 44px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+  font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+/*$vite$:1*/
