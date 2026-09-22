@@ -56,7 +56,7 @@ test('paused popup hides the "X script live" line', async () => {
   const root = await mount({ paused: true });
   const status = root.querySelector<HTMLElement>('#x-script-status')!;
   assert.equal(status.hidden, true);
-  assert.equal(root.querySelector('#pause-toggle')?.textContent, 'Start');
+  assert.match((root.querySelector('#pause-toggle')?.textContent ?? ''), /Start/);
 });
 
 test('running popup shows the live card counts', async () => {

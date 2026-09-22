@@ -123,7 +123,7 @@ function bind(root: HTMLElement, initial: Settings): void {
 
   const paintPause = (): void => {
     pauseToggle.dataset.paused = paused ? 'true' : 'false';
-    pauseToggle.textContent = paused ? 'Start' : 'Pause';
+    pauseToggle.textContent = paused ? 'Paused · Start' : 'Pause';
   };
 
   // "X script live" means the feed script is judging. Paused it is attached but idle,

@@ -1,5 +1,5 @@
 import "./settings-DRS-MZ5q.js";
-import { t as mountSettingsPage } from "./settings-ui-CD0DQHBU.js";
+import { t as mountSettingsPage } from "./settings-ui-CXWsSTZV.js";
 //#region entrypoints/popup/main.ts
 mountSettingsPage(document.querySelector("#app"));
 //#endregion

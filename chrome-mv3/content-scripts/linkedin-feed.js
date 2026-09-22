@@ -568,6 +568,7 @@
 	var PENDING_MS = 12e3;
 	function runTimelineGuard(ctx, adapter) {
 		let settings = DEFAULT_SETTINGS;
+		let settingsHydrated = false;
 		const missingKeyState = { shown: false };
 		const undoneIds = /* @__PURE__ */ new Set();
 		const observedArticles = /* @__PURE__ */ new WeakSet();
@@ -581,7 +582,7 @@
 				clearStamp(article);
 			},
 			shouldJudge(article) {
-				if (settings.paused) return false;
+				if (!settingsHydrated || settings.paused) return false;
 				if (inFlightArticles.has(article)) return false;
 				if (article.getAttribute("data-slop-guard")) return false;
 				return Boolean(adapter.extract(article));
@@ -660,7 +661,22 @@
 						return;
 					}
 					if (result.code === "PAUSED") {
+						settings = {
+							...settings,
+							paused: true
+						};
+						for (const card of adapter.listArticles()) {
+							clearStamp(card);
+							ownSlopRow(card)?.remove();
+							if (card.getAttribute("data-slop-guard") === "pending") slopFeed.reset(card);
+							else {
+								clearStamp(card);
+								ownSlopRow(card)?.remove();
+							}
+						}
 						slopFeed.reset(article);
+						adapter.probe?.(true);
+						document.querySelector(".slop-guard-modelbar")?.remove();
 						return;
 					}
 					markError(article, "jev error");
@@ -717,8 +733,9 @@
 			subtree: true
 		});
 		const sweepTimer = window.setInterval(() => {
-			slopFeed.scan();
+			if (!settingsHydrated) return;
 			adapter.probe?.(settings.paused);
+			if (!settings.paused) slopFeed.scan();
 		}, 2e3);
 		ctx.onInvalidated(() => {
 			mutationObserver.disconnect();
@@ -727,12 +744,14 @@
 		});
 		Promise.all([loadSettings(), loadUndoneIds(adapter.undoKey)]).then(([loaded, ids]) => {
 			settings = loaded;
+			settingsHydrated = true;
 			for (const id of ids) undoneIds.add(id);
 			adapter.probe?.(settings.paused);
 			if (!settings.paused) slopFeed.scan();
 		});
 		const applyLoadedSettings = (loaded) => {
 			settings = loaded;
+			settingsHydrated = true;
 			for (const article of adapter.listArticles()) {
 				if (article.getAttribute("data-slop-guard") === "error" && loaded.apiKey.trim()) {
 					slopFeed.reset(article);
@@ -1082,7 +1101,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/home/runner/work/jev-slop-guard/jev-slop-guard/entrypoints/linkedin-feed.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/linkedin-feed.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

@@ -106,7 +106,7 @@ function bind(root, initial) {
 	};
 	const paintPause = () => {
 		pauseToggle.dataset.paused = paused ? "true" : "false";
-		pauseToggle.textContent = paused ? "Start" : "Pause";
+		pauseToggle.textContent = paused ? "Paused · Start" : "Pause";
 	};
 	const refreshStatus = () => {
 		if (paused) {
