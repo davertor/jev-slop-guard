@@ -38,6 +38,10 @@ jobs:
       - name: Bump version in package.json
         id: bump
         run: |
+          # CI owns the version. Re-anchor package.json to the last tag first: a version
+          # edited by hand has no tag, so cz loses its baseline and walks the whole history.
+          last=$(git describe --tags --abbrev=0 | sed 's/^v//')
+          sed -i "s/\"version\": \".*\"/\"version\": \"$last\"/" package.json
           set +e
           cz bump --yes --version-files-only
           code=$?
