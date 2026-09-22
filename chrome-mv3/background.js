@@ -1113,7 +1113,7 @@ var background = (function() {
 		}
 	}
 	//#endregion
-	//#region \0virtual:wxt-background-entrypoint?/home/runner/work/jev-slop-guard/jev-slop-guard/entrypoints/background.ts
+	//#region \0virtual:wxt-background-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/background.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

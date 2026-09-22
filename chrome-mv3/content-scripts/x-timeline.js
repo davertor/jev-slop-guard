@@ -840,27 +840,41 @@
 			settings = loaded;
 			for (const id of ids) undoneIds.add(id);
 			adapter.probe?.(settings.paused);
-			slopFeed.scan();
+			if (!settings.paused) slopFeed.scan();
 		});
-		chromeApi().storage.onChanged.addListener((changes, area) => {
-			if (area !== "local" || !changes["slopGuard.settings.v1"]) return;
-			loadSettings().then((loaded) => {
-				settings = loaded;
-				for (const article of adapter.listArticles()) {
-					if (article.getAttribute("data-slop-guard") === "error" && loaded.apiKey.trim()) {
-						slopFeed.reset(article);
-						if (isInViewport(article)) slopFeed.judge(article);
-						continue;
-					}
-					reapplyFromDataset(article, settings, {
-						undone: undoneIds.has(article.dataset.slopId ?? ""),
-						onPutBack: slopFeed.putBack
-					});
+		const applyLoadedSettings = (loaded) => {
+			settings = loaded;
+			for (const article of adapter.listArticles()) {
+				if (article.getAttribute("data-slop-guard") === "error" && loaded.apiKey.trim()) {
+					slopFeed.reset(article);
+					if (!loaded.paused && isInViewport(article)) slopFeed.judge(article);
+					continue;
 				}
-				document.querySelector(".slop-guard-banner")?.remove();
-				adapter.probe?.(settings.paused);
-				if (!settings.paused) slopFeed.scan();
-			});
+				reapplyFromDataset(article, settings, {
+					undone: undoneIds.has(article.dataset.slopId ?? ""),
+					onPutBack: slopFeed.putBack
+				});
+			}
+			document.querySelector(".slop-guard-banner")?.remove();
+			adapter.probe?.(settings.paused);
+			if (!settings.paused) slopFeed.scan();
+			else document.querySelector(".slop-guard-modelbar")?.remove();
+		};
+		const onSettingsStorageChange = (changes, area) => {
+			if (area !== "local" || !changes["slopGuard.settings.v1"]) return;
+			if ("newValue" in changes["slopGuard.settings.v1"]) {
+				applyLoadedSettings(mergeSettings(changes[SETTINGS_KEY].newValue));
+				return;
+			}
+			loadSettings().then(applyLoadedSettings);
+		};
+		chromeApi().storage.onChanged.addListener(onSettingsStorageChange);
+		chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+			if (message?.type !== "SETTINGS_UPDATED") return;
+			const raw = message.settings;
+			applyLoadedSettings(mergeSettings(raw));
+			sendResponse({ ok: true });
+			return true;
 		});
 	}
 	async function loadUndoneIds(key) {
@@ -952,6 +966,7 @@
 	function showXProbe(paused) {
 		if (paused) {
 			document.getElementById("slop-guard-xprobe")?.remove();
+			for (const node of document.querySelectorAll(".slop-guard-xprobe")) node.remove();
 			return;
 		}
 		const { cards, ready, miss } = xStatus();
@@ -1235,7 +1250,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/home/runner/work/jev-slop-guard/jev-slop-guard/entrypoints/x-timeline.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/x-timeline.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

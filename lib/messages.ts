@@ -38,6 +38,11 @@ export type InjectLiMessage = {
   tabId: number;
 };
 
+export type SettingsUpdatedMessage = {
+  type: 'SETTINGS_UPDATED';
+  settings: Settings;
+};
+
 export type ExtensionMessage =
   | JudgeTweetMessage
   | GetSettingsMessage
@@ -45,7 +50,8 @@ export type ExtensionMessage =
   | XStatusMessage
   | InjectXMessage
   | LiStatusMessage
-  | InjectLiMessage;
+  | InjectLiMessage
+  | SettingsUpdatedMessage;
 
 export type XStatusResult = {
   ok: true;

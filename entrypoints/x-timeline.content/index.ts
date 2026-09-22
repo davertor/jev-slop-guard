@@ -66,6 +66,7 @@ const PROBE_STYLE: Partial<CSSStyleDeclaration> = {
 function showXProbe(paused: boolean): void {
   if (paused) {
     document.getElementById('slop-guard-xprobe')?.remove();
+    for (const node of document.querySelectorAll('.slop-guard-xprobe')) node.remove();
     return;
   }
   const { cards, ready, miss } = xStatus();

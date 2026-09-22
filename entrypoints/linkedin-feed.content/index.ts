@@ -35,7 +35,7 @@ function liStatus(): LiStatusResult {
 
 function showLiProbe(paused: boolean): void {
   if (paused) {
-    document.querySelector('.slop-guard-liprobe')?.remove();
+    for (const node of document.querySelectorAll('.slop-guard-liprobe')) node.remove();
     return;
   }
   const { cards, ready } = liStatus();
