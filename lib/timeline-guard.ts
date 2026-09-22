@@ -27,6 +27,7 @@ export function runTimelineGuard(
   adapter: FeedAdapter,
 ): void {
   let settings: Settings = DEFAULT_SETTINGS;
+  let settingsHydrated = false;
   const missingKeyState = { shown: false };
   const undoneIds = new Set<string>();
   const observedArticles = new WeakSet<HTMLElement>();
@@ -42,7 +43,7 @@ export function runTimelineGuard(
     },
 
     shouldJudge(article: HTMLElement): boolean {
-      if (settings.paused) return false;
+      if (!settingsHydrated || settings.paused) return false;
       if (inFlightArticles.has(article)) return false;
       if (article.getAttribute('data-slop-guard')) return false;
       return Boolean(adapter.extract(article));
@@ -134,7 +135,21 @@ export function runTimelineGuard(
         }
 
         if (result.code === 'PAUSED') {
+          // Popup/storage is paused but this tab still thought it was live — sync hard.
+          settings = { ...settings, paused: true };
+          for (const card of adapter.listArticles()) {
+            clearStamp(card);
+            ownSlopRow(card)?.remove();
+            if (card.getAttribute('data-slop-guard') === 'pending') slopFeed.reset(card);
+            else {
+              // Keep done dataset so unpause can reapply; drop visible chrome.
+              clearStamp(card);
+              ownSlopRow(card)?.remove();
+            }
+          }
           slopFeed.reset(article);
+          adapter.probe?.(true);
+          document.querySelector('.slop-guard-modelbar')?.remove();
           return;
         }
 
@@ -204,8 +219,9 @@ export function runTimelineGuard(
   mutationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   const sweepTimer = window.setInterval(() => {
-    slopFeed.scan();
+    if (!settingsHydrated) return;
     adapter.probe?.(settings.paused);
+    if (!settings.paused) slopFeed.scan();
   }, 2000);
   ctx.onInvalidated(() => {
     mutationObserver.disconnect();
@@ -215,6 +231,7 @@ export function runTimelineGuard(
 
   void Promise.all([loadSettings(), loadUndoneIds(adapter.undoKey)]).then(([loaded, ids]) => {
     settings = loaded;
+    settingsHydrated = true;
     for (const id of ids) undoneIds.add(id);
     adapter.probe?.(settings.paused);
     if (!settings.paused) slopFeed.scan();
@@ -222,6 +239,7 @@ export function runTimelineGuard(
 
   const applyLoadedSettings = (loaded: Settings): void => {
     settings = loaded;
+    settingsHydrated = true;
     for (const article of adapter.listArticles()) {
       if (article.getAttribute('data-slop-guard') === 'error' && loaded.apiKey.trim()) {
         slopFeed.reset(article);

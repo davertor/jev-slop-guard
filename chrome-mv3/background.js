@@ -982,6 +982,30 @@ var background = (function() {
 		hydrateCache();
 		watchXTabs();
 		watchLinkedInTabs();
+		const feedTabUrls = [
+			"https://x.com/*",
+			"https://www.x.com/*",
+			"https://twitter.com/*",
+			"https://www.twitter.com/*",
+			"https://www.linkedin.com/*",
+			"https://linkedin.com/*"
+		];
+		const broadcastSettings = (settings) => {
+			chromeApi().tabs.query({ url: feedTabUrls }).then((tabs) => {
+				for (const tab of tabs) {
+					if (typeof tab.id !== "number") continue;
+					sendTabMessage(tab.id, {
+						type: "SETTINGS_UPDATED",
+						settings
+					}).catch(() => {});
+				}
+			}).catch(() => {});
+		};
+		chromeApi().storage.onChanged.addListener((changes, area) => {
+			if (area !== "local" || !changes["slopGuard.settings.v1"]) return;
+			const next = mergeSettings(changes[SETTINGS_KEY]?.newValue);
+			broadcastSettings(next);
+		});
 		chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			const msg = message;
 			if (msg.type === "PING") {
@@ -1113,7 +1137,7 @@ var background = (function() {
 		}
 	}
 	//#endregion
-	//#region \0virtual:wxt-background-entrypoint?/home/runner/work/jev-slop-guard/jev-slop-guard/entrypoints/background.ts
+	//#region \0virtual:wxt-background-entrypoint?/Users/dverdu/Python_projects/jev-slop-detector/entrypoints/background.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),

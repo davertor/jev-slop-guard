@@ -1,5 +1,5 @@
 import { callJev } from '../lib/jev';
-import { chromeApi } from '../lib/chrome-msg';
+import { chromeApi, sendTabMessage } from '../lib/chrome-msg';
 import {
   isInjectLiMessage,
   isInjectXMessage,
@@ -10,7 +10,7 @@ import {
   type SettingsResult,
 } from '../lib/messages';
 import { createLimiter } from '../lib/queue';
-import { loadSettings } from '../lib/settings';
+import { loadSettings, mergeSettings, SETTINGS_KEY } from '../lib/settings';
 import type { Verdict } from '../lib/verdict';
 import { ensureLinkedInFeed, watchLinkedInTabs } from '../lib/li-inject';
 import { ensureXTimeline, watchXTabs } from '../lib/x-inject';
@@ -25,6 +25,37 @@ export default defineBackground(() => {
   void hydrateCache();
   watchXTabs();
   watchLinkedInTabs();
+
+  const feedTabUrls = [
+    'https://x.com/*',
+    'https://www.x.com/*',
+    'https://twitter.com/*',
+    'https://www.twitter.com/*',
+    'https://www.linkedin.com/*',
+    'https://linkedin.com/*',
+  ];
+
+  const broadcastSettings = (settings: Awaited<ReturnType<typeof loadSettings>>): void => {
+    void chromeApi()
+      .tabs.query({ url: feedTabUrls })
+      .then((tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          void sendTabMessage(tab.id, { type: 'SETTINGS_UPDATED', settings }).catch(() => {
+            /* content script may not be ready */
+          });
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  };
+
+  chromeApi().storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[SETTINGS_KEY]) return;
+    const next = mergeSettings(changes[SETTINGS_KEY]?.newValue);
+    broadcastSettings(next);
+  });
 
   chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const msg = message as ExtensionMessage;
