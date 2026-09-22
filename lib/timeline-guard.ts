@@ -2,7 +2,7 @@ import { applyVerdict, clearStamp, markError, markPending, ownSlopRow, reapplyFr
 import { chromeApi, sendRuntimeMessage } from './chrome-msg';
 import type { JudgeResult } from './messages';
 import { debounce } from './queue';
-import { DEFAULT_SETTINGS, loadSettings, SETTINGS_KEY, type Settings } from './settings';
+import { DEFAULT_SETTINGS, loadSettings, mergeSettings, SETTINGS_KEY, type Settings } from './settings';
 
 export type FeedItem = {
   id: string;
@@ -217,28 +217,53 @@ export function runTimelineGuard(
     settings = loaded;
     for (const id of ids) undoneIds.add(id);
     adapter.probe?.(settings.paused);
-    slopFeed.scan();
+    if (!settings.paused) slopFeed.scan();
   });
 
-  chromeApi().storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[SETTINGS_KEY]) return;
-    void loadSettings().then((loaded) => {
-      settings = loaded;
-      for (const article of adapter.listArticles()) {
-        if (article.getAttribute('data-slop-guard') === 'error' && loaded.apiKey.trim()) {
-          slopFeed.reset(article);
-          if (isInViewport(article)) void slopFeed.judge(article);
-          continue;
-        }
-        reapplyFromDataset(article, settings, {
-          undone: undoneIds.has(article.dataset.slopId ?? ''),
-          onPutBack: slopFeed.putBack,
-        });
+  const applyLoadedSettings = (loaded: Settings): void => {
+    settings = loaded;
+    for (const article of adapter.listArticles()) {
+      if (article.getAttribute('data-slop-guard') === 'error' && loaded.apiKey.trim()) {
+        slopFeed.reset(article);
+        if (!loaded.paused && isInViewport(article)) void slopFeed.judge(article);
+        continue;
       }
-      document.querySelector('.slop-guard-banner')?.remove();
-      adapter.probe?.(settings.paused);
-      if (!settings.paused) slopFeed.scan();
-    });
+      reapplyFromDataset(article, settings, {
+        undone: undoneIds.has(article.dataset.slopId ?? ''),
+        onPutBack: slopFeed.putBack,
+      });
+    }
+    document.querySelector('.slop-guard-banner')?.remove();
+    // Always refresh probe from the latest paused flag (hide chip when paused).
+    adapter.probe?.(settings.paused);
+    if (!settings.paused) slopFeed.scan();
+    else {
+      document.querySelector('.slop-guard-modelbar')?.remove();
+    }
+  };
+
+  const onSettingsStorageChange = (
+    changes: Record<string, { newValue?: unknown }>,
+    area: string,
+  ): void => {
+    if (area !== 'local' || !changes[SETTINGS_KEY]) return;
+    // Prefer newValue from the event — avoids a stale async reload race with Pause.
+    if ('newValue' in changes[SETTINGS_KEY]!) {
+      applyLoadedSettings(mergeSettings(changes[SETTINGS_KEY]!.newValue));
+      return;
+    }
+    void loadSettings().then(applyLoadedSettings);
+  };
+
+  chromeApi().storage.onChanged.addListener(onSettingsStorageChange);
+
+  chromeApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    const type = (message as { type?: string } | null)?.type;
+    if (type !== 'SETTINGS_UPDATED') return;
+    const raw = (message as { settings?: unknown }).settings;
+    applyLoadedSettings(mergeSettings(raw));
+    sendResponse({ ok: true });
+    return true;
   });
 }
 

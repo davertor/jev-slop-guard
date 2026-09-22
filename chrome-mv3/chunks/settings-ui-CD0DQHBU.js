@@ -86,6 +86,24 @@ function bind(root, initial) {
 	const apiKeyLabel = must(root, "#apiKey-label");
 	const apiKeyHint = must(root, "#apiKey-hint");
 	let paused = initial.paused;
+	const notifyFeedTabs = (s) => {
+		chromeApi().tabs.query({ url: [
+			"https://x.com/*",
+			"https://www.x.com/*",
+			"https://twitter.com/*",
+			"https://www.twitter.com/*",
+			"https://www.linkedin.com/*",
+			"https://linkedin.com/*"
+		] }).then((tabs) => {
+			for (const tab of tabs) {
+				if (typeof tab.id !== "number") continue;
+				sendTabMessage(tab.id, {
+					type: "SETTINGS_UPDATED",
+					settings: s
+				}).catch(() => {});
+			}
+		}).catch(() => {});
+	};
 	const paintPause = () => {
 		pauseToggle.dataset.paused = paused ? "true" : "false";
 		pauseToggle.textContent = paused ? "Start" : "Pause";
@@ -141,17 +159,22 @@ function bind(root, initial) {
 		model: model.value === "jev-1.13.0" ? "jev-1.13.0" : "jev-latest"
 	});
 	must(root, "#save").addEventListener("click", () => {
-		saveSettings(read()).then(() => {
+		const next = read();
+		saveSettings(next).then(() => {
 			warning.hidden = Boolean(apiKey.value.trim());
 			status.textContent = "Saved.";
+			notifyFeedTabs(next);
 		});
 	});
 	pauseToggle.addEventListener("click", () => {
 		paused = !paused;
 		paintPause();
 		refreshStatus();
-		saveSettings(read()).then(() => {
+		const next = read();
+		notifyFeedTabs(next);
+		saveSettings(next).then(() => {
 			status.textContent = paused ? "Paused." : "Running.";
+			notifyFeedTabs(next);
 		});
 	});
 	stampEnabled.addEventListener("change", () => {

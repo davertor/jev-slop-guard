@@ -94,6 +94,33 @@ function bind(root: HTMLElement, initial: Settings): void {
 
   let paused = initial.paused;
 
+  const notifyFeedTabs = (s: Settings): void => {
+    const api = chromeApi();
+    void api.tabs
+      .query({
+        url: [
+          'https://x.com/*',
+          'https://www.x.com/*',
+          'https://twitter.com/*',
+          'https://www.twitter.com/*',
+          'https://www.linkedin.com/*',
+          'https://linkedin.com/*',
+        ],
+      })
+      .then((tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          void sendTabMessage(tab.id, { type: 'SETTINGS_UPDATED', settings: s }).catch(() => {
+            /* tab may not have the content script yet */
+          });
+        }
+      })
+      .catch(() => {
+        /* tabs.query can fail in some contexts */
+      });
+  };
+
+
   const paintPause = (): void => {
     pauseToggle.dataset.paused = paused ? 'true' : 'false';
     pauseToggle.textContent = paused ? 'Start' : 'Pause';
@@ -162,9 +189,11 @@ function bind(root: HTMLElement, initial: Settings): void {
   });
 
   must(root, '#save').addEventListener('click', () => {
-    void saveSettings(read()).then(() => {
+    const next = read();
+    void saveSettings(next).then(() => {
       warning.hidden = Boolean(apiKey.value.trim());
       status.textContent = 'Saved.';
+      notifyFeedTabs(next);
     });
   });
 
@@ -172,8 +201,11 @@ function bind(root: HTMLElement, initial: Settings): void {
     paused = !paused;
     paintPause();
     refreshStatus();
-    void saveSettings(read()).then(() => {
+    const next = read();
+    notifyFeedTabs(next);
+    void saveSettings(next).then(() => {
       status.textContent = paused ? 'Paused.' : 'Running.';
+      notifyFeedTabs(next);
     });
   });
 
