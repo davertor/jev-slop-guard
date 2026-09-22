@@ -233,6 +233,23 @@ test('over-threshold pill is Stop | slopP and stamps', () => {
   assert.equal(card.classList.contains('slop-guard-stamped'), true);
 });
 
+test('pause clears an existing stamp and badge, unpause repaints', () => {
+  const root = mount(tweetCard(SAMU));
+  const card = listTweetArticles(root)[0]!;
+  const slop = { tweetId: '42', label: 'slop' as const, slopP: 0.91, notP: 0.09, model: 'jev-latest' };
+  applyVerdict(card, slop, DEFAULT_SETTINGS);
+  assert.equal(card.classList.contains('slop-guard-stamped'), true);
+
+  reapplyFromDataset(card, { ...DEFAULT_SETTINGS, paused: true });
+  assert.equal(card.querySelectorAll('.slop-guard-overlay').length, 0);
+  assert.equal(card.classList.contains('slop-guard-stamped'), false);
+  assert.equal(ownSlopRow(card), null);
+
+  reapplyFromDataset(card, DEFAULT_SETTINGS);
+  assert.equal(card.classList.contains('slop-guard-stamped'), true);
+  assert.match(ownSlopRow(card)?.textContent ?? '', /Stop \| 91%/);
+});
+
 function notSlop(tweetId: string) {
   return { tweetId, label: 'not_slop' as const, slopP: 0.02, notP: 0.98, model: 'jev-latest' };
 }

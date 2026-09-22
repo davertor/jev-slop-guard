@@ -23,6 +23,14 @@ export function applyVerdict(
   settings: Settings,
   opts: { undone?: boolean; onPutBack?: (id: string, article: HTMLElement) => void } = {},
 ): void {
+  // Paused clears the feed: every paint path (judge, reconcile, storage.onChanged)
+  // routes through here, and the dataset survives so unpausing repaints for free.
+  if (settings.paused) {
+    clearBadge(article);
+    clearStamp(article);
+    return;
+  }
+
   article.setAttribute(BADGE_ATTR, 'done');
   article.dataset.slopP = String(verdict.slopP);
   article.dataset.slopNotP = String(verdict.notP);
