@@ -435,6 +435,11 @@
 		clearStamp(article);
 	}
 	function applyVerdict(article, verdict, settings, opts = {}) {
+		if (settings.paused) {
+			clearBadge(article);
+			clearStamp(article);
+			return;
+		}
 		article.setAttribute(BADGE_ATTR, "done");
 		article.dataset.slopP = String(verdict.slopP);
 		article.dataset.slopNotP = String(verdict.notP);
@@ -822,7 +827,10 @@
 			childList: true,
 			subtree: true
 		});
-		const sweepTimer = window.setInterval(() => slopFeed.scan(), 2e3);
+		const sweepTimer = window.setInterval(() => {
+			slopFeed.scan();
+			adapter.probe?.(settings.paused);
+		}, 2e3);
 		ctx.onInvalidated(() => {
 			mutationObserver.disconnect();
 			intersectionObserver.disconnect();
@@ -831,6 +839,7 @@
 		Promise.all([loadSettings(), loadUndoneIds(adapter.undoKey)]).then(([loaded, ids]) => {
 			settings = loaded;
 			for (const id of ids) undoneIds.add(id);
+			adapter.probe?.(settings.paused);
 			slopFeed.scan();
 		});
 		chromeApi().storage.onChanged.addListener((changes, area) => {
@@ -849,6 +858,7 @@
 					});
 				}
 				document.querySelector(".slop-guard-banner")?.remove();
+				adapter.probe?.(settings.paused);
 				if (!settings.paused) slopFeed.scan();
 			});
 		});
@@ -894,13 +904,11 @@
 				const type = message?.type;
 				if (type === "PING" || type === "X_STATUS") sendResponse(xStatus());
 			});
-			showXProbe();
-			const tick = window.setInterval(() => showXProbe(), 2e3);
-			ctx.onInvalidated(() => window.clearInterval(tick));
 			runTimelineGuard(ctx, {
 				listArticles: listTweetArticles,
 				extract: extractTweet,
-				undoKey: "slopGuard.undone.v1"
+				undoKey: "slopGuard.undone.v1",
+				probe: showXProbe
 			});
 		}
 	});
@@ -941,7 +949,11 @@
 		pointerEvents: "none",
 		boxShadow: "0 2px 8px rgba(0,0,0,0.35)"
 	};
-	function showXProbe() {
+	function showXProbe(paused) {
+		if (paused) {
+			document.getElementById("slop-guard-xprobe")?.remove();
+			return;
+		}
 		const { cards, ready, miss } = xStatus();
 		const text = miss ? `X script live · ${cards} cards · ${ready} ready · ${miss}` : `X script live · ${cards} cards · ${ready} ready`;
 		let chip = document.getElementById("slop-guard-xprobe");

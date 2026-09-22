@@ -427,6 +427,11 @@ function markError(article, message) {
 	clearStamp(article);
 }
 function applyVerdict(article, verdict, settings, opts = {}) {
+	if (settings.paused) {
+		clearBadge(article);
+		clearStamp(article);
+		return;
+	}
 	article.setAttribute(BADGE_ATTR, "done");
 	article.dataset.slopP = String(verdict.slopP);
 	article.dataset.slopNotP = String(verdict.notP);

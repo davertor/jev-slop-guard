@@ -90,6 +90,15 @@ function bind(root, initial) {
 		pauseToggle.dataset.paused = paused ? "true" : "false";
 		pauseToggle.textContent = paused ? "Start" : "Pause";
 	};
+	const refreshStatus = () => {
+		if (paused) {
+			xStatusEl.hidden = true;
+			return;
+		}
+		refreshXStatus(xStatusEl).then(() => {
+			if (paused) xStatusEl.hidden = true;
+		});
+	};
 	const syncKeyCopy = (prov) => {
 		if (prov === "openrouter") {
 			apiKeyLabel.textContent = "OpenRouter API key (BYOK → chrome.storage.local)";
@@ -140,6 +149,7 @@ function bind(root, initial) {
 	pauseToggle.addEventListener("click", () => {
 		paused = !paused;
 		paintPause();
+		refreshStatus();
 		saveSettings(read()).then(() => {
 			status.textContent = paused ? "Paused." : "Running.";
 		});
@@ -172,7 +182,7 @@ function bind(root, initial) {
 			sampleOut.textContent = err instanceof Error ? err.message : "Message failed";
 		});
 	});
-	refreshXStatus(xStatusEl);
+	refreshStatus();
 }
 function must(root, sel) {
 	const node = root.querySelector(sel);

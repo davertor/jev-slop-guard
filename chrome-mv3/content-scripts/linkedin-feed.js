@@ -342,6 +342,11 @@
 		clearStamp(article);
 	}
 	function applyVerdict(article, verdict, settings, opts = {}) {
+		if (settings.paused) {
+			clearBadge(article);
+			clearStamp(article);
+			return;
+		}
 		article.setAttribute(BADGE_ATTR, "done");
 		article.dataset.slopP = String(verdict.slopP);
 		article.dataset.slopNotP = String(verdict.notP);
@@ -711,7 +716,10 @@
 			childList: true,
 			subtree: true
 		});
-		const sweepTimer = window.setInterval(() => slopFeed.scan(), 2e3);
+		const sweepTimer = window.setInterval(() => {
+			slopFeed.scan();
+			adapter.probe?.(settings.paused);
+		}, 2e3);
 		ctx.onInvalidated(() => {
 			mutationObserver.disconnect();
 			intersectionObserver.disconnect();
@@ -720,6 +728,7 @@
 		Promise.all([loadSettings(), loadUndoneIds(adapter.undoKey)]).then(([loaded, ids]) => {
 			settings = loaded;
 			for (const id of ids) undoneIds.add(id);
+			adapter.probe?.(settings.paused);
 			slopFeed.scan();
 		});
 		chromeApi().storage.onChanged.addListener((changes, area) => {
@@ -738,6 +747,7 @@
 					});
 				}
 				document.querySelector(".slop-guard-banner")?.remove();
+				adapter.probe?.(settings.paused);
 				if (!settings.paused) slopFeed.scan();
 			});
 		});
@@ -778,13 +788,11 @@
 				const type = message?.type;
 				if (type === "PING" || type === "LI_STATUS") sendResponse(liStatus());
 			});
-			showLiProbe();
-			const tick = window.setInterval(() => showLiProbe(), 2e3);
-			ctx.onInvalidated(() => window.clearInterval(tick));
 			runTimelineGuard(ctx, {
 				listArticles: listLinkedInArticles,
 				extract: extractLinkedInPost,
 				undoKey: "slopGuard.undone.linkedin.v1",
+				probe: showLiProbe,
 				missingKeyMessage: "Jev Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup."
 			});
 		}
@@ -800,7 +808,11 @@
 			ready
 		};
 	}
-	function showLiProbe() {
+	function showLiProbe(paused) {
+		if (paused) {
+			document.querySelector(".slop-guard-liprobe")?.remove();
+			return;
+		}
 		const { cards, ready } = liStatus();
 		let bar = document.querySelector(".slop-guard-liprobe");
 		if (!bar) {
