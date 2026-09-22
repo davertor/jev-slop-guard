@@ -99,6 +99,19 @@ function bind(root: HTMLElement, initial: Settings): void {
     pauseToggle.textContent = paused ? 'Start' : 'Pause';
   };
 
+  // "X script live" means the feed script is judging. Paused it is attached but idle,
+  // so hide it rather than let it read as running. Re-check after the async paint in
+  // case the toggle flipped while the ping was in flight.
+  const refreshStatus = (): void => {
+    if (paused) {
+      xStatusEl.hidden = true;
+      return;
+    }
+    void refreshXStatus(xStatusEl).then(() => {
+      if (paused) xStatusEl.hidden = true;
+    });
+  };
+
   const syncKeyCopy = (prov: Settings['provider']): void => {
     if (prov === 'openrouter') {
       apiKeyLabel.textContent = 'OpenRouter API key (BYOK → chrome.storage.local)';
@@ -158,6 +171,7 @@ function bind(root: HTMLElement, initial: Settings): void {
   pauseToggle.addEventListener('click', () => {
     paused = !paused;
     paintPause();
+    refreshStatus();
     void saveSettings(read()).then(() => {
       status.textContent = paused ? 'Paused.' : 'Running.';
     });
@@ -196,7 +210,7 @@ function bind(root: HTMLElement, initial: Settings): void {
       });
   });
 
-  void refreshXStatus(xStatusEl);
+  refreshStatus();
 }
 
 function must<T extends HTMLElement = HTMLElement>(root: HTMLElement, sel: string): T {
