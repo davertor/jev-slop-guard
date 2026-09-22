@@ -21,10 +21,7 @@ comes from [Jev](https://typesafe.ai), TypeSafe's System One model: one typed
 own API key.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/badges-dark.png">
-    <img src="docs/badges-light.png" width="900" alt="Three sample posts: a green Slop 8% pill under a substantive post, a red Stop 74% pill under an empty announcement, and a blurred post stamped SLOP with a Show the post button.">
-  </picture>
+  <img src="docs/demo.gif" width="380" alt="Scrolling the X timeline: each post gets a slop score, and posts over the threshold are blurred and stamped SLOP with a Show the post button.">
 </p>
 
 <p align="center">
