@@ -1068,7 +1068,7 @@
 		}
 	};
 	//#endregion
-	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/Users/davertor/Python_projects/jev-slop-detector/entrypoints/linkedin-feed.content/index.ts
+	//#region \0virtual:wxt-content-script-isolated-world-entrypoint?/home/runner/work/jev-slop-guard/jev-slop-guard/entrypoints/linkedin-feed.content/index.ts
 	/** Wrapper around `console` with a "[wxt]" prefix */
 	var logger = {
 		debug: (...args) => ([...args], void 0),
