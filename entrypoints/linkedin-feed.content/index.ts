@@ -15,14 +15,11 @@ export default defineContentScript({
       }
     });
 
-    showLiProbe();
-    const tick = window.setInterval(() => showLiProbe(), 2000);
-    ctx.onInvalidated(() => window.clearInterval(tick));
-
     runTimelineGuard(ctx, {
       listArticles: listLinkedInArticles,
       extract: extractLinkedInPost,
       undoKey: 'slopGuard.undone.linkedin.v1',
+      probe: showLiProbe,
       missingKeyMessage:
         'Jev Slop Guard (LinkedIn): add your TypeSafe or OpenRouter API key in the extension popup.',
     });
@@ -36,7 +33,11 @@ function liStatus(): LiStatusResult {
   return { ok: true, live: true, cards: cards.length, ready };
 }
 
-function showLiProbe(): void {
+function showLiProbe(paused: boolean): void {
+  if (paused) {
+    document.querySelector('.slop-guard-liprobe')?.remove();
+    return;
+  }
   const { cards, ready } = liStatus();
   let bar = document.querySelector<HTMLElement>('.slop-guard-liprobe');
   if (!bar) {

@@ -16,6 +16,8 @@ export type FeedAdapter = {
   extract: (article: HTMLElement) => FeedItem | null;
   undoKey: string;
   missingKeyMessage?: string;
+  /** Repaints the on-page debug chip. Paused means the script is idle, so the chip goes away. */
+  probe?: (paused: boolean) => void;
 };
 
 const PENDING_MS = 12_000;
@@ -201,7 +203,10 @@ export function runTimelineGuard(
   });
   mutationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-  const sweepTimer = window.setInterval(() => slopFeed.scan(), 2000);
+  const sweepTimer = window.setInterval(() => {
+    slopFeed.scan();
+    adapter.probe?.(settings.paused);
+  }, 2000);
   ctx.onInvalidated(() => {
     mutationObserver.disconnect();
     intersectionObserver.disconnect();
@@ -211,6 +216,7 @@ export function runTimelineGuard(
   void Promise.all([loadSettings(), loadUndoneIds(adapter.undoKey)]).then(([loaded, ids]) => {
     settings = loaded;
     for (const id of ids) undoneIds.add(id);
+    adapter.probe?.(settings.paused);
     slopFeed.scan();
   });
 
@@ -230,6 +236,7 @@ export function runTimelineGuard(
         });
       }
       document.querySelector('.slop-guard-banner')?.remove();
+      adapter.probe?.(settings.paused);
       if (!settings.paused) slopFeed.scan();
     });
   });

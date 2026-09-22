@@ -15,14 +15,11 @@ export default defineContentScript({
       }
     });
 
-    showXProbe();
-    const tick = window.setInterval(() => showXProbe(), 2000);
-    ctx.onInvalidated(() => window.clearInterval(tick));
-
     runTimelineGuard(ctx, {
       listArticles: listTweetArticles,
       extract: extractTweet,
       undoKey: 'slopGuard.undone.v1',
+      probe: showXProbe,
     });
   },
 });
@@ -66,7 +63,11 @@ const PROBE_STYLE: Partial<CSSStyleDeclaration> = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
 };
 
-function showXProbe(): void {
+function showXProbe(paused: boolean): void {
+  if (paused) {
+    document.getElementById('slop-guard-xprobe')?.remove();
+    return;
+  }
   const { cards, ready, miss } = xStatus();
   const text = miss
     ? `X script live · ${cards} cards · ${ready} ready · ${miss}`
