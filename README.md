@@ -69,6 +69,8 @@ Works on **[x.com](https://x.com)** and **[linkedin.com](https://www.linkedin.co
 6. Open [x.com](https://x.com) or [linkedin.com/feed](https://www.linkedin.com/feed/)
    and scroll.
 
+If you find this useful, consider dropping a ⭐.
+
 ## Settings
 
 <p align="center">
