@@ -3,7 +3,7 @@
   "description": "Label and hide AI-generated slop posts on X and LinkedIn.",
   "private": true,
   "license": "MIT",
-  "version": "0.1.27",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
