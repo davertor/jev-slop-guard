@@ -637,6 +637,10 @@
 						}
 					});
 					if (ctx.isInvalid) return;
+					if (settings.paused) {
+						slopFeed.reset(article);
+						return;
+					}
 					const current = adapter.extract(article);
 					if (!current || current.id !== item.id) {
 						slopFeed.reset(article);
@@ -665,18 +669,8 @@
 							...settings,
 							paused: true
 						};
-						for (const card of adapter.listArticles()) {
-							clearStamp(card);
-							ownSlopRow(card)?.remove();
-							if (card.getAttribute("data-slop-guard") === "pending") slopFeed.reset(card);
-							else {
-								clearStamp(card);
-								ownSlopRow(card)?.remove();
-							}
-						}
+						clearPausedChrome();
 						slopFeed.reset(article);
-						adapter.probe?.(true);
-						document.querySelector(".slop-guard-modelbar")?.remove();
 						return;
 					}
 					markError(article, "jev error");
@@ -708,6 +702,17 @@
 					if (slopFeed.shouldJudge(article) && isInViewport(article)) slopFeed.judge(article);
 				}
 			}
+		};
+		/** Paused looks untouched: every mark this script painted goes, whatever state it is in. */
+		const clearPausedChrome = () => {
+			for (const card of adapter.listArticles()) if (card.getAttribute("data-slop-guard") === "done") {
+				clearStamp(card);
+				ownSlopRow(card)?.remove();
+			} else slopFeed.reset(card);
+			document.querySelector(".slop-guard-banner")?.remove();
+			document.querySelector(".slop-guard-modelbar")?.remove();
+			missingKeyState.shown = false;
+			adapter.probe?.(true);
 		};
 		const scheduleScan = debounce(() => slopFeed.scan(), 120);
 		const intersectionObserver = new IntersectionObserver((entries) => {
@@ -752,6 +757,10 @@
 		const applyLoadedSettings = (loaded) => {
 			settings = loaded;
 			settingsHydrated = true;
+			if (loaded.paused) {
+				clearPausedChrome();
+				return;
+			}
 			for (const article of adapter.listArticles()) {
 				if (article.getAttribute("data-slop-guard") === "error" && loaded.apiKey.trim()) {
 					slopFeed.reset(article);
