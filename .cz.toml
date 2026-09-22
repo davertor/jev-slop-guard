@@ -1,0 +1,4 @@
+[tool.commitizen]
+version_provider = "npm"
+tag_format = "v$version"
+major_version_zero = true

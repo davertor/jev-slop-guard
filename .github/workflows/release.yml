@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Skip the bump commit this job pushes itself.
+    if: ${{ !startsWith(github.event.head_commit.message, 'bump:') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run compile
+      - run: pnpm test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install commitizen==4.18.1
+
+      - name: Bump version in package.json
+        id: bump
+        run: |
+          set +e
+          cz bump --yes --version-files-only
+          code=$?
+          set -e
+          # 21 = no commits eligible for a bump (docs, chore, ci only); 3 = no new commits.
+          if [ "$code" -eq 21 ] || [ "$code" -eq 3 ]; then
+            echo "Nothing to release."
+            exit 0
+          fi
+          [ "$code" -eq 0 ] || exit "$code"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild bundle, commit and tag
+        if: steps.bump.outputs.version
+        run: |
+          pnpm run build
+          rm -rf chrome-mv3
+          cp -R .output/chrome-mv3 chrome-mv3
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json chrome-mv3
+          git commit -m "bump: version ${{ steps.bump.outputs.version }}"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push --follow-tags
