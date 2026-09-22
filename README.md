@@ -25,7 +25,6 @@ own API key.
     <source media="(prefers-color-scheme: dark)" srcset="docs/badges-dark.png">
     <img src="docs/badges-light.png" width="900" alt="Three sample posts: a green Slop 8% pill under a substantive post, a red Stop 74% pill under an empty announcement, and a blurred post stamped SLOP with a Show the post button.">
   </picture>
-  <br><sub>Under the threshold, over it, and stamped. Sample posts, threshold at 70%.</sub>
 </p>
 
 <p align="center">
@@ -41,11 +40,10 @@ own API key.
 
 ## What it does
 
-Works on **[x.com](https://x.com)** (home timeline, also `twitter.com`) and
-**[linkedin.com](https://www.linkedin.com/feed/)** (feed).
+Works on **[x.com](https://x.com)** and **[linkedin.com](https://www.linkedin.com/feed/)**.
 
-- A post loads clean. When Jev answers, a pill appears under it:
-  green **Slop | NN%** below your threshold, red **Stop | NN%** at or above it.
+- Every post gets a pill with its slop score: green **Slop** below your
+  threshold, red **Stop** at or above it.
 - At or above the threshold the post is also blurred and stamped **SLOP**.
   **Show the post** clears that for the current session.
 - Scrolling is never blocked. Classification runs in the background with a
@@ -60,37 +58,22 @@ Works on **[x.com](https://x.com)** (home timeline, also `twitter.com`) and
   - [TypeSafe AI](https://console.typesafe.ai), the default provider.
   - [OpenRouter](https://openrouter.ai/keys). Allow TypeSafe under
     OpenRouter Settings → Privacy, or the decisions endpoint refuses the call.
-- **pnpm**, only if you build from source.
 
 ## Try it in your Chrome
 
-**Option A — prebuilt, no toolchain.** The repo ships the built extension in
-[`chrome-mv3/`](chrome-mv3/). Clone or download the repo and skip to step 3.
-
-**Option B — build from source.**
-
-```sh
-pnpm install
-pnpm build          # writes .output/chrome-mv3
-```
-
-Then load it:
-
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and pick the folder: `chrome-mv3/` for Option A,
-   `.output/chrome-mv3/` for Option B.
-4. Pin **Jev Slop Guard** in the toolbar, open the popup, paste your API key, click **Save**.
-5. Open [x.com](https://x.com) or [linkedin.com/feed](https://www.linkedin.com/feed/)
-   and scroll. Pills appear as verdicts come back.
-
-After you rebuild, click the reload icon on the extension card in
-`chrome://extensions` and refresh the tab.
-
-No key yet? The popup links to a **fixture playground** with sample posts in the
-same DOM shape as X, so you can see the badges before you spend anything.
+1. Clone or download this repo. The built extension is in [`chrome-mv3/`](chrome-mv3/).
+2. Open `chrome://extensions`.
+3. Turn on **Developer mode** (top-right toggle).
+4. Click **Load unpacked** and pick the `chrome-mv3/` folder.
+5. Pin **Jev Slop Guard** in the toolbar, open the popup, paste your API key, click **Save**.
+6. Open [x.com](https://x.com) or [linkedin.com/feed](https://www.linkedin.com/feed/)
+   and scroll.
 
 ## Settings
+
+<p align="center">
+  <a href="docs/settings.png"><img src="docs/settings.png" width="380" alt="The popup: API key field, slop threshold slider at 70%, blur and badge checkboxes, provider and model selects, Save button, and a Try a tweet box."></a>
+</p>
 
 Stored in `chrome.storage.local` only. Nothing leaves your browser except the
 classification request described below.
@@ -109,8 +92,8 @@ classification request described below.
 
 For each post the extension sends the post text and the author handle to the
 provider you picked, and nothing else. Your key and settings stay in
-`chrome.storage.local`. The extension asks for access to `x.com`,
-`twitter.com` and `linkedin.com` to read posts and draw badges, and to
+`chrome.storage.local`. The extension asks for access to `x.com`
+and `linkedin.com` to read posts and draw badges, and to
 `api.typesafe.ai` and `openrouter.ai` to send the classification requests.
 
 ## References
