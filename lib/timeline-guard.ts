@@ -107,6 +107,12 @@ export function runTimelineGuard(
 
         if (ctx.isInvalid) return;
 
+        // Pause can land while the judge call is in flight; don't paint its answer.
+        if (settings.paused) {
+          slopFeed.reset(article);
+          return;
+        }
+
         const current = adapter.extract(article);
         if (!current || current.id !== item.id) {
           slopFeed.reset(article);
@@ -137,19 +143,8 @@ export function runTimelineGuard(
         if (result.code === 'PAUSED') {
           // Popup/storage is paused but this tab still thought it was live — sync hard.
           settings = { ...settings, paused: true };
-          for (const card of adapter.listArticles()) {
-            clearStamp(card);
-            ownSlopRow(card)?.remove();
-            if (card.getAttribute('data-slop-guard') === 'pending') slopFeed.reset(card);
-            else {
-              // Keep done dataset so unpause can reapply; drop visible chrome.
-              clearStamp(card);
-              ownSlopRow(card)?.remove();
-            }
-          }
+          clearPausedChrome();
           slopFeed.reset(article);
-          adapter.probe?.(true);
-          document.querySelector('.slop-guard-modelbar')?.remove();
           return;
         }
 
@@ -187,6 +182,23 @@ export function runTimelineGuard(
         }
       }
     },
+  };
+
+  /** Paused looks untouched: every mark this script painted goes, whatever state it is in. */
+  const clearPausedChrome = (): void => {
+    for (const card of adapter.listArticles()) {
+      if (card.getAttribute('data-slop-guard') === 'done') {
+        // Keep the dataset so unpause reapplies the verdict without judging again.
+        clearStamp(card);
+        ownSlopRow(card)?.remove();
+      } else {
+        slopFeed.reset(card);
+      }
+    }
+    document.querySelector('.slop-guard-banner')?.remove();
+    document.querySelector('.slop-guard-modelbar')?.remove();
+    missingKeyState.shown = false;
+    adapter.probe?.(true);
   };
 
   const scheduleScan = debounce(() => slopFeed.scan(), 120);
@@ -240,6 +252,10 @@ export function runTimelineGuard(
   const applyLoadedSettings = (loaded: Settings): void => {
     settings = loaded;
     settingsHydrated = true;
+    if (loaded.paused) {
+      clearPausedChrome();
+      return;
+    }
     for (const article of adapter.listArticles()) {
       if (article.getAttribute('data-slop-guard') === 'error' && loaded.apiKey.trim()) {
         slopFeed.reset(article);
